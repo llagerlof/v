@@ -8,12 +8,7 @@ use crate::pager;
 use crate::wrap;
 
 pub fn run(cli: &ResolvedCli) -> io::Result<()> {
-    let content = fs::read_to_string(&cli.file).map_err(|err| {
-        io::Error::new(
-            err.kind(),
-            format!("failed to read `{}`: {err}", cli.file.display()),
-        )
-    })?;
+    let content = read_text_file(&cli.file)?;
 
     let wrap_width = wrap::effective_wrap_width(cli.column, wrap::terminal_columns());
     let rendered = render(&cli.file, &content, cli.syntax_enabled(), wrap_width)?;
@@ -23,6 +18,29 @@ pub fn run(cli: &ResolvedCli) -> io::Result<()> {
     } else {
         io::stdout().write_all(rendered.as_bytes())
     }
+}
+
+fn read_text_file(path: &Path) -> io::Result<String> {
+    let bytes = fs::read(path).map_err(|err| {
+        io::Error::new(
+            err.kind(),
+            format!("failed to read `{}`: {err}", path.display()),
+        )
+    })?;
+
+    if bytes.contains(&0) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("`{}` appears to be a binary file", path.display()),
+        ));
+    }
+
+    String::from_utf8(bytes).map_err(|_err| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("`{}` is not valid UTF-8 text", path.display()),
+        )
+    })
 }
 
 fn render(path: &Path, content: &str, syntax_enabled: bool, wrap_width: usize) -> io::Result<String> {
@@ -50,5 +68,23 @@ mod tests {
         .unwrap();
 
         assert_eq!(rendered, "hello world");
+    }
+
+    #[test]
+    fn rejects_binary_files() {
+        let path = std::env::temp_dir().join("v-binary-test.bin");
+        fs::write(&path, b"text\x00binary").unwrap();
+        let err = read_text_file(&path).unwrap_err();
+        assert!(err.to_string().contains("binary file"));
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn rejects_invalid_utf8_text() {
+        let path = std::env::temp_dir().join("v-invalid-utf8-test.txt");
+        fs::write(&path, &[0xFF, 0xFE, b'a', b'b']).unwrap();
+        let err = read_text_file(&path).unwrap_err();
+        assert!(err.to_string().contains("not valid UTF-8 text"));
+        let _ = fs::remove_file(path);
     }
 }
