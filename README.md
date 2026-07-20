@@ -33,7 +33,7 @@ v --syntax=off README.md
 Wrap at 80 columns:
 
 ```bash
-v --column=80 notes.txt
+v --width=80 notes.txt
 ```
 
 Use the terminal width for wrapping:
@@ -51,16 +51,18 @@ v --page manual.md
 Combine options:
 
 ```bash
-v --syntax=0 --column=100 --page src/lib.rs
+v -s off -w 100 -p src/lib.rs
 ```
 
 ## Options
 
 | Option | Default | Description |
 | --- | --- | --- |
-| `--syntax=<on\|off>` | `on` (from config) | Enable or disable syntax highlighting. `off`, `0`, `false`, and `no` turn it off. |
-| `--column=<N>` | `100` (from config) | Wrap lines at `N` columns by word. `0` uses the terminal width. |
-| `--page` | off (from config) | Paginate output using `$PAGER` (defaults to `less -R`). |
+| `-c`, `-w`, `--column=<N>`, `--width=<N>` | `100` (from config) | Wrap lines at `N` columns by word. `0` uses the terminal width. |
+| `-s`, `--syntax=<on\|off>` | `on` (from config) | Enable or disable syntax highlighting. `off`, `0`, `false`, and `no` turn it off. |
+| `-p`, `--page` | off (from config) | Paginate output using `$PAGER` (defaults to `less -R`). |
+| `-h`, `--help` | | Print help information. |
+| `-v`, `--version` | | Print version information. |
 
 Running `v` or `v --help` with no file prints a custom help page with the program version, usage example, options, and configuration file path. Use `-v` to print the version alone.
 
@@ -138,7 +140,7 @@ sudo install -m 755 target/release/v /usr/local/bin/v
 
 - Default wrap width is 100 columns (configurable in `v.conf`).
 - Lines are wrapped by word before syntax highlighting is applied.
-- `--column=0` uses the current terminal width.
+- `--column=0` and `--width=0` use the current terminal width.
 - Words longer than the wrap width are broken character-by-character as a fallback.
 
 ## Syntax highlighting
@@ -150,7 +152,7 @@ Highlighting is driven by [syntect](https://github.com/trishume/syntect) and Sub
 | Variable | Description |
 | --- | --- |
 | `XDG_CONFIG_HOME` | Base directory for the config file (`$XDG_CONFIG_HOME/v/v.conf`). |
-| `PAGER` | Command used when `--page` is passed. Defaults to `less -R`. |
+| `PAGER` | Command used when `-p` or `--page` is passed. Defaults to `less -R`. |
 
 ## License
 

@@ -60,16 +60,16 @@ Data flow:
 3. `viewer::run()` reads the file from disk.
 4. Plain-text word wrapping in `wrap.rs`.
 5. Optional highlighting in `highlight.rs` (includes ANSI reset at end).
-6. Output to stdout, or through `pager.rs` when `--page` is set.
+6. Output to stdout, or through `pager.rs` when `-p` or `--page` is set.
 
 ## Key behavior
 
-- `--syntax=off` and `--syntax=0` disable highlighting.
-- `--column=0` means "use terminal width".
-- Default wrap width is 100 columns; overridable via config or `--column`.
-- Effective wrap width is the requested column count, or terminal width when `--column=0`.
+- `-s` / `--syntax=off` and `--syntax=0` disable highlighting.
+- `-c` / `-w` / `--column=<N>` / `--width=<N>` set wrap width; `0` uses the terminal width.
+- Default wrap width is 100 columns; overridable via config or `-c` / `--column` / `-w` / `--width`.
+- Effective wrap width is the requested column count, or terminal width when column/width is `0`.
 - Highlighted output ends with an ANSI reset (`\x1b[0m`) so terminal colors do not persist.
-- `--page` respects `$PAGER`; default pager command is `less -R`.
+- `-p` / `--page` respects `$PAGER`; default pager command is `less -R`.
 - Unknown file extensions fall back to plain text (no highlighting).
 - Config file: `$XDG_CONFIG_HOME/v/v.conf` or `~/.config/v/v.conf` (TOML). Created on first run.
 - Command-line flags override config file values.

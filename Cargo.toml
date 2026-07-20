@@ -1,7 +1,7 @@
 [package]
 name = "v"
-version = "0.2.1"
-edition = "2021"
+version = "0.2.3"
+edition = "2024"
 description = "A CLI tool to view text files with syntax highlighting and word wrapping"
 license = "MIT"
 

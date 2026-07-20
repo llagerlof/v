@@ -12,15 +12,21 @@ pub struct Cli {
     pub file: Option<PathBuf>,
 
     /// Wrap width in columns (0 uses the terminal width).
-    #[arg(long, value_name = "COLUMNS")]
+    #[arg(
+        short = 'c',
+        visible_short_alias = 'w',
+        long = "column",
+        visible_alias = "width",
+        value_name = "COLUMNS"
+    )]
     pub column: Option<usize>,
 
     /// Enable or disable syntax highlighting (on, off or 0 - default on).
-    #[arg(long, value_name = "on|off")]
+    #[arg(short = 's', long, value_name = "on|off")]
     pub syntax: Option<String>,
 
     /// Paginate output using `$PAGER` (defaults to `less -R`).
-    #[arg(long = "page", action = ArgAction::SetTrue)]
+    #[arg(short = 'p', long = "page", action = ArgAction::SetTrue)]
     pub page: bool,
 
     /// Print help information.
@@ -110,9 +116,10 @@ Arguments:
   [FILE]  File to display
 
 Options:
-      --column <COLUMNS>  Wrap width in columns (0 uses the terminal width)
-      --syntax <on|off>   Enable or disable syntax highlighting (on, off or 0 - default on)
-      --page              Paginate output using `$PAGER` (defaults to `less -R`)
+  -c, -w, --column, --width <COLUMNS>
+                        Wrap width in columns (0 uses the terminal width)
+  -s, --syntax <on|off>   Enable or disable syntax highlighting (on, off or 0 - default on)
+  -p, --page              Paginate output using `$PAGER` (defaults to `less -R`)
   -h, --help              Print help information
   -v, --version           Print version information
 
@@ -170,6 +177,9 @@ mod tests {
         assert!(help.contains("Enjoy the read!"));
         assert!(help.contains("Usage example:"));
         assert!(help.contains("-v, --version"));
+        assert!(help.contains("-p, --page"));
+        assert!(help.contains("-s, --syntax"));
+        assert!(help.contains("-c, -w, --column, --width"));
     }
 
     #[test]
@@ -219,12 +229,43 @@ mod tests {
     fn resolve_prefers_command_line_over_config() {
         let config = Config::default();
         let matches = build_command()
-            .try_get_matches_from(["v", "--syntax=off", "--column=72", "--page", "file.txt"])
+            .try_get_matches_from(["v", "-s", "off", "-w", "72", "-p", "file.txt"])
             .unwrap();
 
         let resolved = resolve(&matches, &config);
         assert_eq!(resolved.syntax, "off");
         assert_eq!(resolved.column, 72);
         assert!(resolved.page);
+    }
+
+    #[test]
+    fn width_alias_matches_column_flag() {
+        let config = Config::default();
+        let matches = build_command()
+            .try_get_matches_from(["v", "--width=42", "file.txt"])
+            .unwrap();
+
+        let resolved = resolve(&matches, &config);
+        assert_eq!(resolved.column, 42);
+    }
+
+    #[test]
+    fn short_width_alias_matches_column_flag() {
+        let config = Config::default();
+        let matches = build_command()
+            .try_get_matches_from(["v", "-w", "42", "file.txt"])
+            .unwrap();
+
+        let resolved = resolve(&matches, &config);
+        assert_eq!(resolved.column, 42);
+    }
+
+    #[test]
+    fn page_flag_accepts_short_form() {
+        let matches = build_command()
+            .try_get_matches_from(["v", "-p", "file.txt"])
+            .unwrap();
+
+        assert!(matches.get_flag("page"));
     }
 }
