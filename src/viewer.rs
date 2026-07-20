@@ -2,12 +2,12 @@ use std::fs;
 use std::io::{self, Write};
 use std::path::Path;
 
-use crate::cli::Cli;
+use crate::cli::ResolvedCli;
 use crate::highlight;
 use crate::pager;
 use crate::wrap;
 
-pub fn run(cli: &Cli) -> io::Result<()> {
+pub fn run(cli: &ResolvedCli) -> io::Result<()> {
     let content = fs::read_to_string(&cli.file).map_err(|err| {
         io::Error::new(
             err.kind(),

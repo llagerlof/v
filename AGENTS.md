@@ -44,8 +44,9 @@ cargo install --path . --force
 
 ```text
 src/
-  main.rs       entry point, clap dispatch
+  main.rs       entry point, config load, clap dispatch
   cli.rs        CLI argument definitions and parsing
+  config.rs     TOML config file path, load, and first-run creation
   viewer.rs     read file, orchestrate render + output
   highlight.rs  syntect-based syntax highlighting
   wrap.rs       terminal width + plain-text word wrapping
@@ -54,28 +55,35 @@ src/
 
 Data flow:
 
-1. `Cli::parse()` reads arguments.
-2. `viewer::run()` reads the file from disk.
-3. Plain-text word wrapping in `wrap.rs`.
-4. Optional highlighting in `highlight.rs` (includes ANSI reset at end).
-5. Output to stdout, or through `pager.rs` when `--page` is set.
+1. `Config::ensure()` loads or creates `$XDG_CONFIG_HOME/v/v.conf` (or `~/.config/v/v.conf`).
+2. CLI arguments are parsed; explicit flags override config values.
+3. `viewer::run()` reads the file from disk.
+4. Plain-text word wrapping in `wrap.rs`.
+5. Optional highlighting in `highlight.rs` (includes ANSI reset at end).
+6. Output to stdout, or through `pager.rs` when `--page` is set.
 
 ## Key behavior
 
 - `--syntax=off` and `--syntax=0` disable highlighting.
 - `--column=0` means "use terminal width".
+- Default wrap width is 100 columns; overridable via config or `--column`.
 - Effective wrap width is the requested column count, or terminal width when `--column=0`.
 - Highlighted output ends with an ANSI reset (`\x1b[0m`) so terminal colors do not persist.
 - `--page` respects `$PAGER`; default pager command is `less -R`.
 - Unknown file extensions fall back to plain text (no highlighting).
+- Config file: `$XDG_CONFIG_HOME/v/v.conf` or `~/.config/v/v.conf` (TOML). Created on first run.
+- Command-line flags override config file values.
+- `v` and `v --help` (without a file) print usage plus version and config path.
 
 ## Dependencies
 
 | Crate | Purpose |
 | --- | --- |
 | `clap` | CLI parsing |
+| `serde` | config (de)serialization |
 | `syntect` | syntax highlighting |
 | `terminal_size` | terminal column detection |
+| `toml` | TOML config file format |
 
 Prefer latest stable crate versions when adding or updating dependencies.
 

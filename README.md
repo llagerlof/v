@@ -6,8 +6,9 @@ A small Rust CLI for viewing text files in the terminal with syntax highlighting
 
 - Print a file's contents to the terminal (non-paginated by default)
 - Syntax highlighting based on the file extension (enabled by default)
-- Word wrapping at a configurable column width
+- Word wrapping at a configurable column width (default 100)
 - Optional pagination through `$PAGER` (defaults to `less -R`)
+- Persistent settings in a TOML config file
 
 ## Usage
 
@@ -57,9 +58,28 @@ v --syntax=0 --column=100 --page src/lib.rs
 
 | Option | Default | Description |
 | --- | --- | --- |
-| `--syntax=<on\|off>` | `on` | Enable or disable syntax highlighting. `off`, `0`, `false`, and `no` turn it off. |
-| `--column=<N>` | `120` | Wrap lines at `N` columns by word. `0` uses the terminal width. |
-| `--page` | off | Paginate output using `$PAGER` (defaults to `less -R`). |
+| `--syntax=<on\|off>` | `on` (from config) | Enable or disable syntax highlighting. `off`, `0`, `false`, and `no` turn it off. |
+| `--column=<N>` | `100` (from config) | Wrap lines at `N` columns by word. `0` uses the terminal width. |
+| `--page` | off (from config) | Paginate output using `$PAGER` (defaults to `less -R`). |
+
+Running `v` or `v --help` with no file prints usage, the program version, and the configuration file path.
+
+## Configuration
+
+On first run, `v` creates a TOML config file with default settings:
+
+- `$XDG_CONFIG_HOME/v/v.conf` when `XDG_CONFIG_HOME` is set
+- otherwise `~/.config/v/v.conf`
+
+Example:
+
+```toml
+syntax = "on"
+column = 100
+page = false
+```
+
+Command-line options override values from the config file. Edit the config file to change defaults for future runs.
 
 ## Requirements
 
@@ -116,7 +136,7 @@ sudo install -m 755 target/release/v /usr/local/bin/v
 
 ## How wrapping works
 
-- Default wrap width is 120 columns.
+- Default wrap width is 100 columns (configurable in `v.conf`).
 - Lines are wrapped by word before syntax highlighting is applied.
 - `--column=0` uses the current terminal width.
 - Words longer than the wrap width are broken character-by-character as a fallback.
@@ -129,6 +149,7 @@ Highlighting is driven by [syntect](https://github.com/trishume/syntect) and Sub
 
 | Variable | Description |
 | --- | --- |
+| `XDG_CONFIG_HOME` | Base directory for the config file (`$XDG_CONFIG_HOME/v/v.conf`). |
 | `PAGER` | Command used when `--page` is passed. Defaults to `less -R`. |
 
 ## License
