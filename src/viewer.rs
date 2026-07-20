@@ -26,13 +26,13 @@ pub fn run(cli: &Cli) -> io::Result<()> {
 }
 
 fn render(path: &Path, content: &str, syntax_enabled: bool, wrap_width: usize) -> io::Result<String> {
-    let highlighted = if syntax_enabled {
-        highlight::highlight_file(path, content)?
-    } else {
-        content.to_string()
-    };
+    let wrapped = wrap::wrap_plain_text(content, wrap_width);
 
-    Ok(wrap::wrap_text(&highlighted, wrap_width))
+    if syntax_enabled {
+        highlight::highlight_file(path, &wrapped)
+    } else {
+        Ok(wrapped)
+    }
 }
 
 #[cfg(test)]

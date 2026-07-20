@@ -7,6 +7,7 @@ use syntect::parsing::SyntaxSet;
 use syntect::util::{as_24_bit_terminal_escaped, LinesWithEndings};
 
 const DEFAULT_THEME: &str = "base16-ocean.dark";
+const RESET_ANSI: &str = "\x1b[0m";
 
 /// Highlight file contents based on the file extension.
 pub fn highlight_file(path: &Path, content: &str) -> io::Result<String> {
@@ -38,6 +39,7 @@ pub fn highlight_file(path: &Path, content: &str) -> io::Result<String> {
         output.push_str(&as_24_bit_terminal_escaped(&ranges[..], false));
     }
 
+    output.push_str(RESET_ANSI);
     Ok(output)
 }
 
@@ -53,6 +55,7 @@ mod tests {
         assert!(highlighted.contains('\x1b'));
         assert!(highlighted.contains("fn"));
         assert!(highlighted.contains("main"));
+        assert!(highlighted.ends_with("\x1b[0m"));
     }
 
     #[test]

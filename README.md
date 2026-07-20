@@ -58,7 +58,7 @@ v --syntax=0 --column=100 --page src/lib.rs
 | Option | Default | Description |
 | --- | --- | --- |
 | `--syntax=<on\|off>` | `on` | Enable or disable syntax highlighting. `off`, `0`, `false`, and `no` turn it off. |
-| `--column=<N>` | `120` | Wrap lines at `N` columns. `0` uses the terminal width. If `N` is smaller than the terminal width, the terminal width is used instead. |
+| `--column=<N>` | `120` | Wrap lines at `N` columns by word. `0` uses the terminal width. |
 | `--page` | off | Paginate output using `$PAGER` (defaults to `less -R`). |
 
 ## Requirements
@@ -117,9 +117,9 @@ sudo install -m 755 target/release/v /usr/local/bin/v
 ## How wrapping works
 
 - Default wrap width is 120 columns.
+- Lines are wrapped by word before syntax highlighting is applied.
 - `--column=0` uses the current terminal width.
-- If you request fewer columns than the terminal provides, the terminal width wins. For example, `--column=80` on a 120-column terminal wraps at 120.
-- If you request more columns than the terminal provides, your requested width is used.
+- Words longer than the wrap width are broken character-by-character as a fallback.
 
 ## Syntax highlighting
 
