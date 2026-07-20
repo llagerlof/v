@@ -24,11 +24,13 @@ pub fn page_output(content: &str) -> io::Result<()> {
             )
         })?;
 
-    child
-        .stdin
-        .as_mut()
-        .ok_or_else(|| io::Error::new(io::ErrorKind::BrokenPipe, "pager stdin unavailable"))?
-        .write_all(content.as_bytes())?;
+    {
+        child
+            .stdin
+            .as_mut()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::BrokenPipe, "pager stdin unavailable"))?
+            .write_all(content.as_bytes())?;
+    }
 
     let status = child.wait()?;
     if status.success() || status.code() == Some(1) {
