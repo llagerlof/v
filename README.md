@@ -62,7 +62,7 @@ v --syntax=0 --column=100 --page src/lib.rs
 | `--column=<N>` | `100` (from config) | Wrap lines at `N` columns by word. `0` uses the terminal width. |
 | `--page` | off (from config) | Paginate output using `$PAGER` (defaults to `less -R`). |
 
-Running `v` or `v --help` with no file prints usage, the program version, and the configuration file path.
+Running `v` or `v --help` with no file prints a custom help page with the program version, usage example, options, and configuration file path. Use `-v` to print the version alone.
 
 ## Configuration
 

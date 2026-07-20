@@ -73,7 +73,8 @@ Data flow:
 - Unknown file extensions fall back to plain text (no highlighting).
 - Config file: `$XDG_CONFIG_HOME/v/v.conf` or `~/.config/v/v.conf` (TOML). Created on first run.
 - Command-line flags override config file values.
-- `v` and `v --help` (without a file) print usage plus version and config path.
+- `v` and `v --help` (without a file) print a custom help page with version, usage example, options, and config path.
+- `-v` print version information (`v v<version>`).
 
 ## Dependencies
 

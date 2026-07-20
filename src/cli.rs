@@ -4,7 +4,6 @@ use clap::{ArgAction, ArgMatches, CommandFactory, Parser};
 
 use crate::config::Config;
 
-/// View text files with syntax highlighting and word wrapping.
 #[derive(Parser, Debug)]
 #[command(name = "v", disable_help_flag = true, disable_version_flag = true)]
 pub struct Cli {
@@ -12,25 +11,30 @@ pub struct Cli {
     #[arg(required = false)]
     pub file: Option<PathBuf>,
 
-    /// Enable or disable syntax highlighting (`on`, `off`, or `0`).
-    #[arg(long, value_name = "on|off")]
-    pub syntax: Option<String>,
-
-    /// Wrap width in columns (`0` uses the terminal width).
+    /// Wrap width in columns (0 uses the terminal width).
     #[arg(long, value_name = "COLUMNS")]
     pub column: Option<usize>,
+
+    /// Enable or disable syntax highlighting (on, off or 0 - default on).
+    #[arg(long, value_name = "on|off")]
+    pub syntax: Option<String>,
 
     /// Paginate output using `$PAGER` (defaults to `less -R`).
     #[arg(long = "page", action = ArgAction::SetTrue)]
     pub page: bool,
 
     /// Print help information.
-    #[arg(short = 'h', long = "help", action = ArgAction::HelpLong)]
-    help: bool,
+    #[arg(short = 'h', long = "help", action = ArgAction::SetTrue)]
+    pub help: bool,
 
     /// Print version information.
-    #[arg(short = 'V', long = "version", action = ArgAction::Version)]
-    version: bool,
+    #[arg(
+        short = 'v',
+        visible_short_alias = 'V',
+        long = "version",
+        action = ArgAction::SetTrue
+    )]
+    pub version: bool,
 }
 
 pub struct ResolvedCli {
@@ -40,11 +44,8 @@ pub struct ResolvedCli {
     pub page: bool,
 }
 
-pub fn build_command(config: &Config, config_path: &Path) -> clap::Command {
+pub fn build_command() -> clap::Command {
     Cli::command()
-        .about("View text files with syntax highlighting and word wrapping.")
-        .version(env!("CARGO_PKG_VERSION"))
-        .after_help(help_footer(config, config_path))
 }
 
 pub fn resolve(matches: &ArgMatches, config: &Config) -> ResolvedCli {
@@ -82,15 +83,50 @@ impl ResolvedCli {
     }
 }
 
-pub fn help_footer(config: &Config, config_path: &Path) -> String {
+pub fn format_config_path(config_path: &Path) -> String {
+    if let Ok(home) = std::env::var("HOME") {
+        let home_path = PathBuf::from(home);
+        if let Ok(relative) = config_path.strip_prefix(home_path) {
+            return format!("~/{}", relative.display());
+        }
+    }
+
+    config_path.display().to_string()
+}
+
+pub fn format_help(config_path: &Path) -> String {
     format!(
-        "Version: {}\nConfig: {}\n\nConfig defaults:\n  syntax = {}\n  column = {}\n  page = {}",
-        env!("CARGO_PKG_VERSION"),
-        config_path.display(),
-        config.syntax,
-        config.column,
-        config.page,
+        "\
+v v{version}
+A cli tool to view text files with word wrapping and syntax highlighting.
+
+Usage example:
+$ v history.md
+
+Usage syntax:
+v [OPTIONS] [FILE]
+
+Arguments:
+  [FILE]  File to display
+
+Options:
+      --column <COLUMNS>  Wrap width in columns (0 uses the terminal width)
+      --syntax <on|off>   Enable or disable syntax highlighting (on, off or 0 - default on)
+      --page              Paginate output using `$PAGER` (defaults to `less -R`)
+  -h, --help              Print help information
+  -v, --version           Print version information
+
+Configuration file: {config_path}
+
+    \"Enjoy the read!\"
+        ",
+        version = env!("CARGO_PKG_VERSION"),
+        config_path = format_config_path(config_path),
     )
+}
+
+pub fn format_version() -> String {
+    format!("v v{}", env!("CARGO_PKG_VERSION"))
 }
 
 #[cfg(test)]
@@ -127,12 +163,39 @@ mod tests {
     }
 
     #[test]
-    fn help_footer_includes_version_and_config_path() {
-        let config = Config::default();
-        let footer = help_footer(&config, Path::new("/home/user/.config/v/v.conf"));
-        assert!(footer.contains(env!("CARGO_PKG_VERSION")));
-        assert!(footer.contains("/home/user/.config/v/v.conf"));
-        assert!(footer.contains("column = 100"));
+    fn help_includes_version_and_config_path() {
+        let help = format_help(Path::new("/home/user/.config/v/v.conf"));
+        assert!(help.starts_with(&format!("v v{}", env!("CARGO_PKG_VERSION"))));
+        assert!(help.contains("Configuration file:"));
+        assert!(help.contains("Enjoy the read!"));
+        assert!(help.contains("Usage example:"));
+        assert!(help.contains("-v, --version"));
+    }
+
+    #[test]
+    fn format_config_path_expands_home_directory() {
+        let home = std::env::var("HOME").expect("HOME must be set for this test");
+        let config_path = PathBuf::from(&home).join(".config/v/v.conf");
+        assert_eq!(format_config_path(&config_path), "~/.config/v/v.conf");
+    }
+
+    #[test]
+    fn format_config_path_leaves_non_home_paths_unchanged() {
+        let path = format_config_path(Path::new("/var/custom/v/v.conf"));
+        assert_eq!(path, "/var/custom/v/v.conf");
+    }
+
+    #[test]
+    fn version_flag_accepts_lowercase_and_uppercase_short_aliases() {
+        let matches = build_command()
+            .try_get_matches_from(["v", "-v"])
+            .unwrap();
+        assert!(matches.get_flag("version"));
+
+        let matches = build_command()
+            .try_get_matches_from(["v", "-V"])
+            .unwrap();
+        assert!(matches.get_flag("version"));
     }
 
     #[test]
@@ -142,7 +205,7 @@ mod tests {
             column: 80,
             page: true,
         };
-        let matches = build_command(&config, Path::new("/tmp/v.conf"))
+        let matches = build_command()
             .try_get_matches_from(["v", "file.txt"])
             .unwrap();
 
@@ -155,7 +218,7 @@ mod tests {
     #[test]
     fn resolve_prefers_command_line_over_config() {
         let config = Config::default();
-        let matches = build_command(&config, Path::new("/tmp/v.conf"))
+        let matches = build_command()
             .try_get_matches_from(["v", "--syntax=off", "--column=72", "--page", "file.txt"])
             .unwrap();
 

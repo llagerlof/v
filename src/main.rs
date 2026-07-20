@@ -7,7 +7,7 @@ mod wrap;
 
 use std::process;
 
-use crate::cli::{build_command, resolve};
+use crate::cli::{build_command, format_help, format_version, resolve};
 use crate::config::Config;
 
 fn main() {
@@ -19,15 +19,20 @@ fn main() {
         }
     };
 
-    let matches = match build_command(&config, &config_path).try_get_matches() {
+    let matches = match build_command().try_get_matches() {
         Ok(matches) => matches,
         Err(err) => {
             err.exit();
         }
     };
 
-    if matches.get_one::<std::path::PathBuf>("file").is_none() {
-        let _ = build_command(&config, &config_path).print_help();
+    if matches.get_flag("version") {
+        println!("{}", format_version());
+        return;
+    }
+
+    if matches.get_flag("help") || matches.get_one::<std::path::PathBuf>("file").is_none() {
+        print!("{}", format_help(&config_path));
         println!();
         return;
     }
