@@ -64,12 +64,12 @@ Data flow:
 
 ## Key behavior
 
-- `-s` / `--syntax=off` and `--syntax=0` disable highlighting.
+- `-s` / `--syntax=<on|off>` enables or disables highlighting; overrides config.
 - `-c` / `-w` / `--column=<N>` / `--width=<N>` set wrap width; `0` uses the terminal width.
 - Default wrap width is 100 columns; overridable via config or `-c` / `--column` / `-w` / `--width`.
 - Effective wrap width is the requested column count, or terminal width when column/width is `0`.
 - Highlighted output ends with an ANSI reset (`\x1b[0m`) so terminal colors do not persist.
-- `-p` / `--page` respects `$PAGER`; default pager command is `less -R`.
+- `-p` / `--page[=<on|off>]` enables or disables pagination; overrides config. Bare `-p` is equivalent to `-p on`. When enabled, respects `$PAGER`; default pager command is `less -R`.
 - Unknown file extensions fall back to plain text (no highlighting).
 - Config file: `$XDG_CONFIG_HOME/v/v.conf` or `~/.config/v/v.conf` (TOML). Created on first run.
 - Command-line flags override config file values.

@@ -45,7 +45,7 @@ v --column=0 wide.txt
 Paginate output:
 
 ```bash
-v --page manual.md
+v -p manual.md
 ```
 
 Combine options:
@@ -59,8 +59,8 @@ v -s off -w 100 -p src/lib.rs
 | Option | Default | Description |
 | --- | --- | --- |
 | `-c`, `-w`, `--column=<N>`, `--width=<N>` | `100` (from config) | Wrap lines at `N` columns by word. `0` uses the terminal width. |
-| `-s`, `--syntax=<on\|off>` | `on` (from config) | Enable or disable syntax highlighting. `off`, `0`, `false`, and `no` turn it off. |
-| `-p`, `--page` | off (from config) | Paginate output using `$PAGER` (defaults to `less -R`). |
+| `-s`, `--syntax=<on\|off>` | `on` (from config) | Enable or disable syntax highlighting. |
+| `-p`, `--page[=<on\|off>]` | off (from config) | Enable or disable pagination using `$PAGER` (defaults to `less -R`). Bare `-p` is equivalent to `-p on`. |
 | `-h`, `--help` | | Print help information. |
 | `-v`, `--version` | | Print version information. |
 
@@ -152,7 +152,7 @@ Highlighting is driven by [syntect](https://github.com/trishume/syntect) and Sub
 | Variable | Description |
 | --- | --- |
 | `XDG_CONFIG_HOME` | Base directory for the config file (`$XDG_CONFIG_HOME/v/v.conf`). |
-| `PAGER` | Command used when `-p` or `--page` is passed. Defaults to `less -R`. |
+| `PAGER` | Command used when pagination is enabled. Defaults to `less -R`. |
 
 ## License
 

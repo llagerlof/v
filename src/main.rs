@@ -7,7 +7,7 @@ mod wrap;
 
 use std::process;
 
-use crate::cli::{build_command, format_help, format_version, resolve};
+use crate::cli::{format_help, format_version, parse_matches, resolve};
 use crate::config::Config;
 
 fn main() {
@@ -19,7 +19,7 @@ fn main() {
         }
     };
 
-    let matches = match build_command().try_get_matches() {
+    let matches = match parse_matches() {
         Ok(matches) => matches,
         Err(err) => {
             err.exit();

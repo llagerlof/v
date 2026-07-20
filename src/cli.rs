@@ -21,13 +21,20 @@ pub struct Cli {
     )]
     pub column: Option<usize>,
 
-    /// Enable or disable syntax highlighting (on, off or 0 - default on).
-    #[arg(short = 's', long, value_name = "on|off")]
+    /// Enable or disable syntax highlighting (default from config).
+    #[arg(short = 's', long, value_name = "on|off", value_parser = ["on", "off"])]
     pub syntax: Option<String>,
 
-    /// Paginate output using `$PAGER` (defaults to `less -R`).
-    #[arg(short = 'p', long = "page", action = ArgAction::SetTrue)]
-    pub page: bool,
+    /// Enable or disable pagination using `$PAGER` (default from config).
+    #[arg(
+        short = 'p',
+        long = "page",
+        value_name = "on|off",
+        value_parser = ["on", "off"],
+        default_missing_value = "on",
+        num_args = 0..=1
+    )]
+    pub page: Option<String>,
 
     /// Print help information.
     #[arg(short = 'h', long = "help", action = ArgAction::SetTrue)]
@@ -54,6 +61,61 @@ pub fn build_command() -> clap::Command {
     Cli::command()
 }
 
+fn is_page_flag(arg: &str) -> bool {
+    arg == "-p" || arg == "--page"
+}
+
+fn is_page_value(arg: &str) -> bool {
+    arg.eq_ignore_ascii_case("on") || arg.eq_ignore_ascii_case("off")
+}
+
+/// Inserts a default `on` value after bare `-p` / `--page` when not followed by `on` or `off`.
+pub fn normalize_page_args(args: &[String]) -> Vec<String> {
+    if args.len() <= 1 {
+        return args.to_vec();
+    }
+
+    let mut normalized = Vec::with_capacity(args.len() + 1);
+    normalized.push(args[0].clone());
+
+    let mut i = 1;
+    while i < args.len() {
+        let arg = &args[i];
+        normalized.push(arg.clone());
+
+        if is_page_flag(arg) {
+            let insert_on = match args.get(i + 1) {
+                None => true,
+                Some(next) if next.starts_with('-') => true,
+                Some(next) if is_page_value(next) => false,
+                Some(_) => true,
+            };
+
+            if insert_on {
+                normalized.push("on".into());
+            }
+        }
+
+        i += 1;
+    }
+
+    normalized
+}
+
+pub fn parse_matches() -> Result<ArgMatches, clap::Error> {
+    let args: Vec<String> = std::env::args().collect();
+    parse_matches_from(args)
+}
+
+pub fn parse_matches_from<I, T>(args: I) -> Result<ArgMatches, clap::Error>
+where
+    I: IntoIterator<Item = T>,
+    T: Into<String>,
+{
+    let args: Vec<String> = args.into_iter().map(Into::into).collect();
+    build_command().try_get_matches_from(normalize_page_args(&args))
+}
+
 pub fn resolve(matches: &ArgMatches, config: &Config) -> ResolvedCli {
     let syntax = matches
         .get_one::<String>("syntax")
@@ -63,10 +125,9 @@ pub fn resolve(matches: &ArgMatches, config: &Config) -> ResolvedCli {
         .get_one::<usize>("column")
         .copied()
         .unwrap_or(config.column);
-    let page = if matches.get_flag("page") {
-        true
-    } else {
-        config.page
+    let page = match matches.get_one::<String>("page") {
+        Some(value) => value.eq_ignore_ascii_case("on"),
+        None => config.page,
     };
 
     ResolvedCli {
@@ -82,10 +143,7 @@ pub fn resolve(matches: &ArgMatches, config: &Config) -> ResolvedCli {
 
 impl ResolvedCli {
     pub fn syntax_enabled(&self) -> bool {
-        !matches!(
-            self.syntax.to_ascii_lowercase().as_str(),
-            "off" | "0" | "false" | "no"
-        )
+        !self.syntax.eq_ignore_ascii_case("off")
     }
 }
 
@@ -117,11 +175,11 @@ Arguments:
 
 Options:
   -c, -w, --column, --width <COLUMNS>
-                        Wrap width in columns (0 uses the terminal width)
-  -s, --syntax <on|off>   Enable or disable syntax highlighting (on, off or 0 - default on)
-  -p, --page              Paginate output using `$PAGER` (defaults to `less -R`)
-  -h, --help              Print help information
-  -v, --version           Print version information
+                         Wrap width in columns (0 uses the terminal width)
+  -s, --syntax <on|off>  Enable or disable syntax highlighting (default from config)
+  -p, --page <on|off>    Enable or disable pagination using `$PAGER` (default from config; bare `-p` is `on`)
+  -h, --help             Print help information
+  -v, --version          Print version information
 
 Configuration file: {config_path}
 
@@ -142,7 +200,7 @@ mod tests {
     use crate::config::{DEFAULT_COLUMN, DEFAULT_SYNTAX};
 
     #[test]
-    fn syntax_flag_parses_off_values() {
+    fn syntax_flag_parses_off_value() {
         let cli = ResolvedCli {
             file: PathBuf::from("test.rs"),
             syntax: "off".into(),
@@ -150,12 +208,14 @@ mod tests {
             page: false,
         };
         assert!(!cli.syntax_enabled());
+    }
 
-        let cli = ResolvedCli {
-            syntax: "0".into(),
-            ..cli
-        };
-        assert!(!cli.syntax_enabled());
+    #[test]
+    fn syntax_flag_rejects_invalid_values() {
+        let err = build_command()
+            .try_get_matches_from(["v", "-s", "0", "file.txt"])
+            .unwrap_err();
+        assert!(err.to_string().contains("invalid value"));
     }
 
     #[test]
@@ -228,14 +288,25 @@ mod tests {
     #[test]
     fn resolve_prefers_command_line_over_config() {
         let config = Config::default();
-        let matches = build_command()
-            .try_get_matches_from(["v", "-s", "off", "-w", "72", "-p", "file.txt"])
+        let matches = parse_matches_from(["v", "-s", "off", "-w", "72", "-p", "on", "file.txt"])
             .unwrap();
 
         let resolved = resolve(&matches, &config);
         assert_eq!(resolved.syntax, "off");
         assert_eq!(resolved.column, 72);
         assert!(resolved.page);
+    }
+
+    #[test]
+    fn page_off_overrides_config() {
+        let config = Config {
+            page: true,
+            ..Config::default()
+        };
+        let matches = parse_matches_from(["v", "-p", "off", "file.txt"]).unwrap();
+
+        let resolved = resolve(&matches, &config);
+        assert!(!resolved.page);
     }
 
     #[test]
@@ -261,11 +332,31 @@ mod tests {
     }
 
     #[test]
-    fn page_flag_accepts_short_form() {
-        let matches = build_command()
-            .try_get_matches_from(["v", "-p", "file.txt"])
-            .unwrap();
+    fn page_flag_accepts_on_and_off() {
+        let config = Config::default();
+        let matches = parse_matches_from(["v", "-p", "on", "file.txt"]).unwrap();
+        assert!(resolve(&matches, &config).page);
 
-        assert!(matches.get_flag("page"));
+        let matches = parse_matches_from(["v", "--page=off", "file.txt"]).unwrap();
+        assert!(!resolve(&matches, &config).page);
+    }
+
+    #[test]
+    fn page_flag_defaults_to_on_without_argument() {
+        let config = Config::default();
+        let matches = parse_matches_from(["v", "-p", "file.txt"]).unwrap();
+
+        assert!(resolve(&matches, &config).page);
+
+        let matches = parse_matches_from(["v", "--page", "file.txt"]).unwrap();
+        assert!(resolve(&matches, &config).page);
+    }
+
+    #[test]
+    fn normalize_page_args_inserts_on_before_file() {
+        assert_eq!(
+            normalize_page_args(&["v".into(), "-p".into(), "file.txt".into()]),
+            vec!["v", "-p", "on", "file.txt"]
+        );
     }
 }
