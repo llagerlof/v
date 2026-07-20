@@ -63,13 +63,29 @@ impl Config {
             )
         })?;
 
-        toml::from_str(&contents).map_err(|err| {
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("failed to parse config `{}`: {err}", path.display()),
-            )
-        })
+        toml::from_str(&contents)
+            .map_err(|err| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("failed to parse config `{}`: {err}", path.display()),
+                )
+            })
+            .and_then(|config| validate(&config).map(|_| config))
     }
+}
+
+fn validate(config: &Config) -> io::Result<()> {
+    if config.syntax.eq_ignore_ascii_case("on") || config.syntax.eq_ignore_ascii_case("off") {
+        return Ok(());
+    }
+
+    Err(io::Error::new(
+        io::ErrorKind::InvalidData,
+        format!(
+            "invalid syntax value `{}` in config: expected `on` or `off`",
+            config.syntax
+        ),
+    ))
 }
 
 fn config_dir() -> io::Result<PathBuf> {
@@ -126,5 +142,12 @@ mod tests {
         };
         let parsed: Config = toml::from_str(&toml::to_string(&config).unwrap()).unwrap();
         assert_eq!(parsed, config);
+    }
+
+    #[test]
+    fn rejects_invalid_syntax_values() {
+        let config: Config = toml::from_str("syntax = \"maybe\"\ncolumn = 100\npage = false").unwrap();
+        let err = validate(&config).unwrap_err();
+        assert!(err.to_string().contains("invalid syntax value"));
     }
 }
