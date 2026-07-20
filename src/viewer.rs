@@ -16,7 +16,12 @@ pub fn run(cli: &ResolvedCli) -> io::Result<()> {
     if cli.page {
         pager::page_output(&rendered)
     } else {
-        io::stdout().write_all(rendered.as_bytes())
+        let mut stdout = io::stdout();
+        stdout.write_all(rendered.as_bytes())?;
+        if !rendered.ends_with('\n') {
+            stdout.write_all(b"\n")?;
+        }
+        Ok(())
     }
 }
 
