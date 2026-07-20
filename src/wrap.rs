@@ -1,3 +1,6 @@
+use unicode_width::UnicodeWidthChar;
+use unicode_width::UnicodeWidthStr;
+
 /// Compute the effective wrap width from a requested column count and terminal width.
 pub fn effective_wrap_width(requested: usize, terminal_cols: usize) -> usize {
     let terminal_cols = terminal_cols.max(1);
@@ -76,7 +79,7 @@ fn split_leading_whitespace(line: &str) -> (&str, &str) {
 }
 
 fn line_width(text: &str) -> usize {
-    text.chars().count()
+    text.width()
 }
 
 fn wrap_plain_line(line: &str, width: usize) -> Vec<String> {
@@ -161,13 +164,17 @@ fn split_words(content: &str) -> impl Iterator<Item = &str> {
 fn break_long_word(word: &str, width: usize) -> Vec<String> {
     let mut chunks = Vec::new();
     let mut chunk = String::new();
+    let mut chunk_width = 0;
 
     for ch in word.chars() {
-        if chunk.chars().count() == width {
+        let ch_width = char_display_width(ch);
+        if chunk_width + ch_width > width && !chunk.is_empty() {
             chunks.push(chunk);
             chunk = String::new();
+            chunk_width = 0;
         }
         chunk.push(ch);
+        chunk_width += ch_width;
     }
 
     if !chunk.is_empty() {
@@ -175,6 +182,10 @@ fn break_long_word(word: &str, width: usize) -> Vec<String> {
     }
 
     chunks
+}
+
+fn char_display_width(ch: char) -> usize {
+    UnicodeWidthChar::width(ch).unwrap_or(0)
 }
 
 #[cfg(test)]
@@ -208,9 +219,9 @@ mod tests {
         let wrapped = wrap_plain_text(line, 30);
         for part in wrapped.split('\n') {
             assert!(
-                part.chars().count() <= 30,
+                line_width(part) <= 30,
                 "line exceeded width: {part:?} ({})",
-                part.chars().count()
+                line_width(part)
             );
         }
         assert!(wrapped.contains('\n'));
@@ -236,6 +247,12 @@ mod tests {
             wrapped,
             "    fn process_items(items: &[Item]) ->\n    Result<Vec<ProcessedItem>, Error> {"
         );
+    }
+
+    #[test]
+    fn wraps_by_terminal_display_width() {
+        let wrapped = wrap_plain_text("你好世界", 4);
+        assert_eq!(wrapped, "你好\n世界");
     }
 
     #[test]
