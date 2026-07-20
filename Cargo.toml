@@ -1,0 +1,15 @@
+[package]
+name = "v"
+version = "0.1.0"
+edition = "2021"
+description = "A CLI tool to view text files with syntax highlighting and word wrapping"
+license = "MIT"
+
+[[bin]]
+name = "v"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4.6.2", features = ["derive"] }
+syntect = "5.3.0"
+terminal_size = "0.4.4"
