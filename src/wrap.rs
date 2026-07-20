@@ -66,21 +66,50 @@ fn split_lines_preserving_endings(text: &str) -> Vec<&str> {
     lines
 }
 
+fn split_leading_whitespace(line: &str) -> (&str, &str) {
+    let content_start = line
+        .char_indices()
+        .find(|(_, ch)| !ch.is_whitespace())
+        .map(|(index, _)| index)
+        .unwrap_or(line.len());
+    line.split_at(content_start)
+}
+
+fn line_width(text: &str) -> usize {
+    text.chars().count()
+}
+
 fn wrap_plain_line(line: &str, width: usize) -> Vec<String> {
     if line.is_empty() {
         return vec![String::new()];
     }
 
-    if line.chars().count() <= width {
+    if line_width(line) <= width {
         return vec![line.to_string()];
     }
 
+    let (prefix, content) = split_leading_whitespace(line);
+    if content.is_empty() {
+        return vec![line.to_string()];
+    }
+
+    let prefix_width = line_width(prefix);
+    let content_width = width.saturating_sub(prefix_width).max(1);
+    let wrapped_content = wrap_line_content(content, content_width);
+
+    wrapped_content
+        .into_iter()
+        .map(|part| format!("{prefix}{part}"))
+        .collect()
+}
+
+fn wrap_line_content(content: &str, width: usize) -> Vec<String> {
     let mut lines = Vec::new();
     let mut current = String::new();
     let mut current_len = 0;
 
-    for word in line.split_whitespace() {
-        let word_len = word.chars().count();
+    for word in split_words(content) {
+        let word_len = line_width(word);
 
         if word_len > width {
             if !current.is_empty() {
@@ -123,6 +152,10 @@ fn wrap_plain_line(line: &str, width: usize) -> Vec<String> {
     }
 
     lines
+}
+
+fn split_words(content: &str) -> impl Iterator<Item = &str> {
+    content.split_whitespace()
 }
 
 fn break_long_word(word: &str, width: usize) -> Vec<String> {
@@ -193,5 +226,27 @@ mod tests {
     fn preserves_existing_line_breaks() {
         let wrapped = wrap_plain_text("short\nanother line here", 80);
         assert_eq!(wrapped, "short\nanother line here");
+    }
+
+    #[test]
+    fn preserves_leading_indent_on_wrapped_lines() {
+        let line = "    fn process_items(items: &[Item]) -> Result<Vec<ProcessedItem>, Error> {";
+        let wrapped = wrap_plain_text(line, 40);
+        assert_eq!(
+            wrapped,
+            "    fn process_items(items: &[Item]) ->\n    Result<Vec<ProcessedItem>, Error> {"
+        );
+    }
+
+    #[test]
+    fn preserves_indent_on_wrapped_markdown() {
+        let line = "    - This is a long bullet point that should stay indented when it wraps";
+        let wrapped = wrap_plain_text(line, 50);
+        for part in wrapped.split('\n') {
+            assert!(
+                part.starts_with("    "),
+                "continuation line lost indent: {part:?}"
+            );
+        }
     }
 }
