@@ -89,10 +89,10 @@ fn validate(config: &Config) -> io::Result<()> {
 }
 
 fn config_dir() -> io::Result<PathBuf> {
-    if let Ok(xdg_config_home) = std::env::var("XDG_CONFIG_HOME") {
-        if !xdg_config_home.is_empty() {
-            return Ok(PathBuf::from(xdg_config_home));
-        }
+    if let Ok(xdg_config_home) = std::env::var("XDG_CONFIG_HOME")
+        && !xdg_config_home.is_empty()
+    {
+        return Ok(PathBuf::from(xdg_config_home));
     }
 
     let home = std::env::var("HOME").map_err(|err| {
