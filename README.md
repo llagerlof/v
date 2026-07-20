@@ -85,7 +85,7 @@ Command-line options override values from the config file. Edit the config file 
 
 ## Requirements
 
-- Rust 1.74+ (2021 edition)
+- Rust 1.85+ (2024 edition)
 - For pagination: `less` or another pager available on your system
 
 ## Compiling
