@@ -183,7 +183,7 @@ Arguments:
 
 Options:
   -c, -w, --column, --width <COLUMNS>
-                         Wrap width in columns (0 uses the terminal width)
+                         Wrap width in columns (default 80; 0 uses the terminal width)
   -s, --syntax <on|off>  Enable or disable syntax highlighting (default from config; bare `-s` is `on`)
   -p, --page <on|off>    Enable or disable pagination using `$PAGER` (default from config; bare `-p` is `on`)
   -h, --help             Print help information

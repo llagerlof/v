@@ -204,7 +204,7 @@ mod tests {
 
     #[test]
     fn effective_width_zero_means_terminal() {
-        assert_eq!(effective_wrap_width(0, 100), 100);
+        assert_eq!(effective_wrap_width(0, 80), 80);
     }
 
     #[test]

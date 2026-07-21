@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-pub const DEFAULT_COLUMN: usize = 100;
+pub const DEFAULT_COLUMN: usize = 80;
 pub const DEFAULT_SYNTAX: &str = "on";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -146,7 +146,7 @@ mod tests {
 
     #[test]
     fn rejects_invalid_syntax_values() {
-        let config: Config = toml::from_str("syntax = \"maybe\"\ncolumn = 100\npage = false").unwrap();
+        let config: Config = toml::from_str("syntax = \"maybe\"\ncolumn = 80\npage = false").unwrap();
         let err = validate(&config).unwrap_err();
         assert!(err.to_string().contains("invalid syntax value"));
     }

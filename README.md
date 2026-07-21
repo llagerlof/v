@@ -6,7 +6,7 @@ A small CLI program for viewing text files in the terminal with custom width wor
 
 - Print a file's contents to the terminal (non-paginated by default).
 - Syntax highlighting based on the file extension (enabled by default).
-- Word wrapping at a configurable column width (default 100).
+- Word wrapping at a configurable column width (default 80).
 - Optional pagination.
 - Persistent settings above can be set in a TOML config file.
 
@@ -60,7 +60,7 @@ $ v -s off -w 100 -p src/index.php
 
 | Option | Default | Description |
 | --- | --- | --- |
-| `-c`, `-w`, `--column=<N>`, `--width=<N>` | `100` (from config) | Wrap lines at `N` columns by word. `0` uses the terminal width. |
+| `-c`, `-w`, `--column=<N>`, `--width=<N>` | `80` (from config) | Wrap lines at `N` columns by word. `0` uses the terminal width. |
 | `-s`, `--syntax[=<on\|off>]` | `on` (from config) | Enable or disable syntax highlighting. Bare `-s` is equivalent to `-s on`. |
 | `-p`, `--page[=<on\|off>]` | off (from config) | Enable or disable pagination using `$PAGER` (defaults to `less -R`). Bare `-p` is equivalent to `-p on`. |
 | `-h`, `--help` | | Print help information. |
@@ -79,7 +79,7 @@ On first run, `v` creates a TOML config file with default settings:
 
 ```toml
 syntax = "on"
-column = 100
+column = 90
 page = false
 ```
 
