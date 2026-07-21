@@ -64,7 +64,7 @@ Data flow:
 
 ## Key behavior
 
-- `-s` / `--syntax=<on|off>` enables or disables highlighting; overrides config.
+- `-s` / `--syntax=<on|off>` enables or disables highlighting; overrides config. Bare `-s` is equivalent to `-s on`.
 - `-c` / `-w` / `--column=<N>` / `--width=<N>` set wrap width; `0` uses the terminal width.
 - Default wrap width is 100 columns; overridable via config or `-c` / `--column` / `-w` / `--width`.
 - Effective wrap width is the requested column count, or terminal width when column/width is `0`.
