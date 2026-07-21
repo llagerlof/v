@@ -8,8 +8,6 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write    
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -17,19 +15,51 @@ jobs:
 
   build:
     needs: test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        arch: [x86_64]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      
+
       - name: Build release
         run: cargo build --release
-      
-      - name: Verify binary
-        run: ls -lh target/release/v
-      
+
+      - name: Package release
+        env:
+          VERSION: ${{ github.ref_name }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          VERSION="${VERSION#v}"
+          PKG="v-${VERSION}-linux-${ARCH}"
+          mkdir -p "${PKG}"
+          cp target/release/v "${PKG}/v"
+          chmod +x "${PKG}/v"
+          tar czf "${PKG}.tar.gz" "${PKG}"
+          sha256sum "${PKG}.tar.gz" > "${PKG}.tar.gz.sha256"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: v-${{ matrix.arch }}
+          path: |
+            v-*-linux-*.tar.gz
+            v-*-linux-*.tar.gz.sha256
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files: ./target/release/v
+          files: dist/*
           tag_name: ${{ github.ref_name }}

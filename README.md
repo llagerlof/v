@@ -60,7 +60,7 @@ $ v -s off -w 100 -p src/index.php
 
 | Option | Default | Description |
 | --- | --- | --- |
-| `-c`, `-w`, `--column=<N>`, `--width=<N>` | `80` (from config) | Wrap lines at `N` columns by word. `0` uses the terminal width. |
+| `-c`, `-w`, `--column=<N>`, `--width=<N>` | `80` (or from config) | Wrap lines at `N` columns by word. `0` uses the terminal width. |
 | `-s`, `--syntax[=<on\|off>]` | `on` (from config) | Enable or disable syntax highlighting. Bare `-s` is equivalent to `-s on`. |
 | `-p`, `--page[=<on\|off>]` | off (from config) | Enable or disable pagination using `$PAGER` (defaults to `less -R`). Bare `-p` is equivalent to `-p on`. |
 | `-h`, `--help` | | Print help information. |
@@ -73,7 +73,7 @@ Running `v` or `v --help` with no file prints a custom help page with the progra
 On first run, `v` creates a TOML config file with default settings:
 
 - `$XDG_CONFIG_HOME/v/v.conf`
-- If `XDG_CONFIG_HOME` is not set, `~/.config/v/v.conf`
+- If `XDG_CONFIG_HOME` is not set, it uses `~/.config/v/v.conf`
 
 **Example**:
 
@@ -85,6 +85,10 @@ page = false
 
 Command-line options override values from the config file. Edit the config file to change defaults for future runs.
 
+## Installation
+
+Download a compressed release file from releases page (https://github.com/llagerlof/v/releases), extract the binary `v` an copy it to `/usr/local/bin/` or `~/.local/bin/`.
+
 ## Compiling
 
 Clone or enter the repository, then build:
@@ -94,49 +98,6 @@ $ cargo build --release
 ```
 
 The executable is written to `target/release/v`.
-
-Run it directly without installing:
-
-```bash
-$ ./target/release/v README.md
-```
-
-### Requirements
-
-- Rust 1.85+ (2024 edition)
-- For pagination: `less` or another pager available on your system
-
-## Installation
-
-### Current user
-
-Install the binary into `~/.local/bin` (make sure that directory is on your `PATH`):
-
-```bash
-$ cargo install --path . --force
-```
-
-Or copy the built binary manually:
-
-```bash
-$ mkdir -p ~/.local/bin
-$ cp target/release/v ~/.local/bin/
-```
-
-### All users (system-wide)
-
-Copy the binary into a directory on the system `PATH`, for example `/usr/local/bin`:
-
-```bash
-$ sudo cp target/release/v /usr/local/bin/
-```
-
-Alternatively, build and install with Cargo using a custom target directory:
-
-```bash
-$ cargo build --release
-$ sudo install -m 755 target/release/v /usr/local/bin/v
-```
 
 ## License
 
