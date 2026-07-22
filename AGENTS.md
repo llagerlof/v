@@ -105,9 +105,9 @@ Prefer latest stable crate versions when adding or updating dependencies.
 cargo test
 cargo clippy -- -D warnings
 ./target/release/v --help
-./target/release/v examples/sample.rs
+./target/release/v examples/sample.php
 ```
 
 ## Sample file
 
-`examples/sample.rs` is a small Rust file useful for manual testing of highlighting and wrapping.
+`examples/sample.php` is a small PHP file useful for manual testing of highlighting and wrapping.
