@@ -1,6 +1,6 @@
 [package]
 name = "v"
-version = "0.5.2"
+version = "0.5.3"
 edition = "2024"
 rust-version = "1.85"
 description = "A CLI tool to view text files with syntax highlighting and word wrapping"
@@ -17,3 +17,14 @@ syntect = "5.3.0"
 terminal_size = "0.4.4"
 toml = "0.9.12"
 unicode-width = "0.2.0"
+
+[profile.release]
+opt-level = "z"
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true
+debug = false
+incremental = false
+overflow-checks = false
+
