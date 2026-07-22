@@ -7,14 +7,14 @@ use syntect::parsing::SyntaxSet;
 use syntect::util::{LinesWithEndings, as_24_bit_terminal_escaped};
 
 const DEFAULT_THEME: &str = "base16-ocean.dark";
-const BRIGHTNESS_BOOST_PERCENT: u16 = 100;
+const BRIGHTNESS_BOOST_PERCENT: u16 = 50;
 const RESET_ANSI: &str = "\x1b[0m";
 
 fn brighten_color(color: Color) -> Color {
     let brighten = |channel: u8| {
         let channel = u16::from(channel);
-        let increase = (255 - channel) * BRIGHTNESS_BOOST_PERCENT / 100;
-        (channel + increase) as u8
+        let increase = channel * BRIGHTNESS_BOOST_PERCENT / 100;
+        (channel + increase).min(u16::from(u8::MAX)) as u8
     };
 
     Color {
@@ -91,7 +91,7 @@ mod tests {
     }
 
     #[test]
-    fn brightens_syntax_foreground_without_changing_alpha() {
+    fn brightens_syntax_foreground_without_losing_color() {
         let color = Color {
             r: 100,
             g: 120,
@@ -101,9 +101,9 @@ mod tests {
 
         let brightened = brighten_color(color);
 
-        assert!(brightened.r > color.r);
-        assert!(brightened.g > color.g);
-        assert!(brightened.b > color.b);
+        assert_eq!(brightened.r, 200);
+        assert_eq!(brightened.g, 240);
+        assert_eq!(brightened.b, 255);
         assert_eq!(brightened.a, color.a);
     }
 }
