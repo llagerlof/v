@@ -101,9 +101,25 @@ mod tests {
 
         let brightened = brighten_color(color);
 
-        assert_eq!(brightened.r, 200);
-        assert_eq!(brightened.g, 240);
-        assert_eq!(brightened.b, 255);
+        assert_eq!(brightened.r, 150);
+        assert_eq!(brightened.g, 180);
+        assert_eq!(brightened.b, 210);
         assert_eq!(brightened.a, color.a);
+    }
+
+    #[test]
+    fn brightening_saturates_instead_of_wrapping() {
+        let color = Color {
+            r: 200,
+            g: 240,
+            b: 255,
+            a: 255,
+        };
+
+        let brightened = brighten_color(color);
+
+        assert_eq!(brightened.r, 255);
+        assert_eq!(brightened.g, 255);
+        assert_eq!(brightened.b, 255);
     }
 }
