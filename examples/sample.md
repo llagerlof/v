@@ -11,3 +11,11 @@ fn main() {
 ```
 
 **Bold text** and *italic text* with more words to test wrapping behavior across multiple highlighted spans in a single line of markdown content here.
+
+## Table
+
+| Option | Default | Description |
+| :--- | :---: | ---: |
+| `--column` | 80 | Wrap width in columns, where `0` means the full terminal width |
+| `--syntax` | on | Enable or disable syntax highlighting |
+| `--table` | on | Enable or disable this table formatting |

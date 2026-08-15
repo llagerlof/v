@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 pub const DEFAULT_COLUMN: usize = 80;
 pub const DEFAULT_SYNTAX: &str = "on";
+pub const DEFAULT_TABLE: &str = "on";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Config {
@@ -15,6 +16,8 @@ pub struct Config {
     pub column: usize,
     #[serde(default)]
     pub page: bool,
+    #[serde(default = "default_table")]
+    pub table: String,
 }
 
 impl Default for Config {
@@ -23,6 +26,7 @@ impl Default for Config {
             syntax: default_syntax(),
             column: default_column(),
             page: false,
+            table: default_table(),
         }
     }
 }
@@ -33,6 +37,10 @@ fn default_syntax() -> String {
 
 fn default_column() -> usize {
     DEFAULT_COLUMN
+}
+
+fn default_table() -> String {
+    DEFAULT_TABLE.to_string()
 }
 
 impl Config {
@@ -75,16 +83,18 @@ impl Config {
 }
 
 fn validate(config: &Config) -> io::Result<()> {
-    if config.syntax.eq_ignore_ascii_case("on") || config.syntax.eq_ignore_ascii_case("off") {
+    validate_on_off("syntax", &config.syntax)?;
+    validate_on_off("table", &config.table)
+}
+
+fn validate_on_off(key: &str, value: &str) -> io::Result<()> {
+    if value.eq_ignore_ascii_case("on") || value.eq_ignore_ascii_case("off") {
         return Ok(());
     }
 
     Err(io::Error::new(
         io::ErrorKind::InvalidData,
-        format!(
-            "invalid syntax value `{}` in config: expected `on` or `off`",
-            config.syntax
-        ),
+        format!("invalid {key} value `{value}` in config: expected `on` or `off`"),
     ))
 }
 
@@ -131,6 +141,7 @@ mod tests {
         assert_eq!(config.syntax, "on");
         assert_eq!(config.column, DEFAULT_COLUMN);
         assert!(!config.page);
+        assert_eq!(config.table, "on");
     }
 
     #[test]
@@ -139,6 +150,7 @@ mod tests {
             syntax: "off".into(),
             column: 80,
             page: true,
+            table: "off".into(),
         };
         let parsed: Config = toml::from_str(&toml::to_string(&config).unwrap()).unwrap();
         assert_eq!(parsed, config);
@@ -149,5 +161,18 @@ mod tests {
         let config: Config = toml::from_str("syntax = \"maybe\"\ncolumn = 80\npage = false").unwrap();
         let err = validate(&config).unwrap_err();
         assert!(err.to_string().contains("invalid syntax value"));
+    }
+
+    #[test]
+    fn rejects_invalid_table_values() {
+        let config: Config = toml::from_str("table = \"maybe\"").unwrap();
+        let err = validate(&config).unwrap_err();
+        assert!(err.to_string().contains("invalid table value"));
+    }
+
+    #[test]
+    fn table_defaults_to_on_for_existing_config_files() {
+        let config: Config = toml::from_str("syntax = \"on\"\ncolumn = 80\npage = false").unwrap();
+        assert_eq!(config.table, "on");
     }
 }

@@ -46,6 +46,14 @@ pub fn wrap_plain_text(text: &str, width: usize) -> String {
     output
 }
 
+/// Wrap a single line of text by word, returning one entry per output line.
+pub fn wrap_text_to_lines(text: &str, width: usize) -> Vec<String> {
+    if width == 0 {
+        return vec![text.to_string()];
+    }
+    wrap_line_content(text, width)
+}
+
 fn split_lines_preserving_endings(text: &str) -> Vec<&str> {
     let mut lines = Vec::new();
     let mut start = 0;

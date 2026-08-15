@@ -1,6 +1,7 @@
 mod cli;
 mod config;
 mod highlight;
+mod markdown;
 mod pager;
 mod viewer;
 mod wrap;

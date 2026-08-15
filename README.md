@@ -7,6 +7,7 @@ A small CLI program for viewing text files in the terminal with custom width wor
 - Print a file's contents to the terminal (non-paginated by default).
 - Syntax highlighting based on the file extension (enabled by default).
 - Word wrapping at a configurable column width (default 80).
+- Markdown tables redrawn as ASCII grid tables (enabled by default).
 - Optional pagination.
 - Persistent settings above can be set in a TOML config file.
 
@@ -44,6 +45,12 @@ $ v --column=0 annotations.txt
 
 __Note:__ `--width` and `--column` are equivalent.
 
+**View a markdown file with its tables left as-is**:
+
+```bash
+$ v --table=off CHANGELOG.md
+```
+
 **Paginate output**:
 
 ```bash
@@ -63,10 +70,30 @@ $ v -s off -w 100 -p src/index.php
 | `-c`, `-w`, `--column=<N>`, `--width=<N>` | `80` (or from config) | Wrap lines at `N` columns by word. `0` uses the terminal width. |
 | `-s`, `--syntax[=<on\|off>]` | `on` (from config) | Enable or disable syntax highlighting. Bare `-s` is equivalent to `-s on`. |
 | `-p`, `--page[=<on\|off>]` | off (from config) | Enable or disable pagination using `$PAGER` (defaults to `less -R`). Bare `-p` is equivalent to `-p on`. |
+| `-t`, `--table[=<on\|off>]` | `on` (from config) | Enable or disable markdown table formatting. Bare `-t` is equivalent to `-t on`. |
 | `-h`, `--help` | | Print help information. |
 | `-v`, `--version` | | Print version information. |
 
 Running `v` or `v --help` with no file prints a custom help page with the program version, usage example, options, and configuration file path. Use `-v` to print the version alone.
+
+## Markdown tables
+
+In markdown files (`.md`, `.markdown`, `.mdown`, `.mkd`, `.mdx`), pipe tables are redrawn as ASCII grid tables so columns line up:
+
+```text
+| Crate    | Purpose               |    +----------+-----------------------+
+| -------- | --------------------- | -> | Crate    | Purpose               |
+| clap     | CLI parsing           |    +----------+-----------------------+
+| syntect  | syntax highlighting   |    | clap     | CLI parsing           |
+                                        | syntect  | syntax highlighting   |
+                                        +----------+-----------------------+
+```
+
+- Column alignment from the delimiter row (`:---`, `:---:`, `---:`) is respected.
+- Tables are laid out to fit the wrap width; long cells wrap inside their column, and rows are separated by a rule when that happens.
+- Tables inside fenced or indented code blocks are left untouched, as is a table too wide to fit even at its minimum column width.
+
+Use `-t off` or `table = "off"` in the config to print the original markdown instead.
 
 ## Configuration
 
@@ -81,6 +108,7 @@ On first run, `v` creates a TOML config file with default settings:
 syntax = "on"
 column = 90
 page = false
+table = "on"
 ```
 
 Command-line options override values from the config file. Edit the config file to change defaults for future runs.

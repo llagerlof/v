@@ -43,6 +43,17 @@ pub struct Cli {
     )]
     pub page: Option<String>,
 
+    /// Enable or disable markdown table formatting (default from config).
+    #[arg(
+        short = 't',
+        long = "table",
+        value_name = "on|off",
+        value_parser = ["on", "off"],
+        default_missing_value = "on",
+        num_args = 0..=1
+    )]
+    pub table: Option<String>,
+
     /// Print help information.
     #[arg(short = 'h', long = "help", action = ArgAction::SetTrue)]
     pub help: bool,
@@ -62,6 +73,7 @@ pub struct ResolvedCli {
     pub syntax: String,
     pub column: usize,
     pub page: bool,
+    pub table: String,
 }
 
 pub fn build_command() -> clap::Command {
@@ -73,11 +85,11 @@ fn is_on_off_value(arg: &str) -> bool {
 }
 
 fn is_optional_on_off_flag(arg: &str) -> bool {
-    matches!(arg, "-p" | "--page" | "-s" | "--syntax")
+    matches!(arg, "-p" | "--page" | "-s" | "--syntax" | "-t" | "--table")
 }
 
-/// Inserts a default `on` value after bare `-p` / `--page` / `-s` / `--syntax`
-/// when not followed by `on` or `off`.
+/// Inserts a default `on` value after bare `-p` / `--page` / `-s` / `--syntax` /
+/// `-t` / `--table` when not followed by `on` or `off`.
 pub fn normalize_optional_value_args(args: &[String]) -> Vec<String> {
     if args.len() <= 1 {
         return args.to_vec();
@@ -137,6 +149,10 @@ pub fn resolve(matches: &ArgMatches, config: &Config) -> ResolvedCli {
         Some(value) => value.eq_ignore_ascii_case("on"),
         None => config.page,
     };
+    let table = matches
+        .get_one::<String>("table")
+        .cloned()
+        .unwrap_or_else(|| config.table.clone());
 
     ResolvedCli {
         file: matches
@@ -146,12 +162,17 @@ pub fn resolve(matches: &ArgMatches, config: &Config) -> ResolvedCli {
         syntax,
         column,
         page,
+        table,
     }
 }
 
 impl ResolvedCli {
     pub fn syntax_enabled(&self) -> bool {
         !self.syntax.eq_ignore_ascii_case("off")
+    }
+
+    pub fn table_enabled(&self) -> bool {
+        !self.table.eq_ignore_ascii_case("off")
     }
 }
 
@@ -186,6 +207,7 @@ Options:
                          Wrap width in columns (default 80; 0 uses the terminal width)
   -s, --syntax <on|off>  Enable or disable syntax highlighting (default from config; bare `-s` is `on`)
   -p, --page <on|off>    Enable or disable pagination using `$PAGER` (default from config; bare `-p` is `on`)
+  -t, --table <on|off>   Enable or disable markdown table formatting (default from config; bare `-t` is `on`)
   -h, --help             Print help information
   -v, --version          Print version information
 
@@ -205,7 +227,7 @@ pub fn format_version() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{DEFAULT_COLUMN, DEFAULT_SYNTAX};
+    use crate::config::{DEFAULT_COLUMN, DEFAULT_SYNTAX, DEFAULT_TABLE};
 
     #[test]
     fn syntax_flag_parses_off_value() {
@@ -214,6 +236,7 @@ mod tests {
             syntax: "off".into(),
             column: DEFAULT_COLUMN,
             page: false,
+            table: DEFAULT_TABLE.into(),
         };
         assert!(!cli.syntax_enabled());
     }
@@ -233,6 +256,7 @@ mod tests {
             syntax: DEFAULT_SYNTAX.into(),
             column: DEFAULT_COLUMN,
             page: false,
+            table: DEFAULT_TABLE.into(),
         };
         assert!(cli.syntax_enabled());
     }
@@ -247,6 +271,7 @@ mod tests {
         assert!(help.contains("-v, --version"));
         assert!(help.contains("-p, --page"));
         assert!(help.contains("-s, --syntax"));
+        assert!(help.contains("-t, --table"));
         assert!(help.contains("-c, -w, --column, --width"));
     }
 
@@ -282,6 +307,7 @@ mod tests {
             syntax: "off".into(),
             column: 80,
             page: true,
+            table: "off".into(),
         };
         let matches = build_command()
             .try_get_matches_from(["v", "file.txt"])
@@ -291,6 +317,7 @@ mod tests {
         assert_eq!(resolved.syntax, "off");
         assert_eq!(resolved.column, 80);
         assert!(resolved.page);
+        assert!(!resolved.table_enabled());
     }
 
     #[test]
@@ -370,6 +397,33 @@ mod tests {
             normalize_optional_value_args(&["v".into(), "-s".into(), "file.txt".into()]),
             vec!["v", "-s", "on", "file.txt"]
         );
+        assert_eq!(
+            normalize_optional_value_args(&["v".into(), "-t".into(), "file.md".into()]),
+            vec!["v", "-t", "on", "file.md"]
+        );
+    }
+
+    #[test]
+    fn table_flag_overrides_config() {
+        let config = Config::default();
+        let matches = parse_matches_from(["v", "-t", "off", "file.md"]).unwrap();
+        assert!(!resolve(&matches, &config).table_enabled());
+
+        let matches = parse_matches_from(["v", "--table=off", "file.md"]).unwrap();
+        assert!(!resolve(&matches, &config).table_enabled());
+    }
+
+    #[test]
+    fn table_flag_defaults_to_on_without_argument() {
+        let config = Config {
+            table: "off".into(),
+            ..Config::default()
+        };
+        let matches = parse_matches_from(["v", "-t", "file.md"]).unwrap();
+        assert!(resolve(&matches, &config).table_enabled());
+
+        let matches = parse_matches_from(["v", "--table", "file.md"]).unwrap();
+        assert!(resolve(&matches, &config).table_enabled());
     }
 
     #[test]

@@ -4,6 +4,7 @@ use std::path::Path;
 
 use crate::cli::ResolvedCli;
 use crate::highlight;
+use crate::markdown;
 use crate::pager;
 use crate::wrap;
 
@@ -11,7 +12,13 @@ pub fn run(cli: &ResolvedCli) -> io::Result<()> {
     let content = read_text_file(&cli.file)?;
 
     let wrap_width = wrap::effective_wrap_width(cli.column, wrap::terminal_columns());
-    let rendered = render(&cli.file, &content, cli.syntax_enabled(), wrap_width)?;
+    let rendered = render(
+        &cli.file,
+        &content,
+        cli.syntax_enabled(),
+        cli.table_enabled(),
+        wrap_width,
+    )?;
 
     if cli.page {
         pager::page_output(&rendered)
@@ -48,8 +55,21 @@ fn read_text_file(path: &Path) -> io::Result<String> {
     })
 }
 
-fn render(path: &Path, content: &str, syntax_enabled: bool, wrap_width: usize) -> io::Result<String> {
-    let wrapped = wrap::wrap_plain_text(content, wrap_width);
+fn render(
+    path: &Path,
+    content: &str,
+    syntax_enabled: bool,
+    table_enabled: bool,
+    wrap_width: usize,
+) -> io::Result<String> {
+    // Tables are laid out to fit `wrap_width`, so word wrapping leaves them intact.
+    let content = if table_enabled && markdown::is_markdown_path(path) {
+        markdown::format_tables(content, wrap_width)
+    } else {
+        content.to_string()
+    };
+
+    let wrapped = wrap::wrap_plain_text(&content, wrap_width);
 
     if syntax_enabled {
         highlight::highlight_file(path, &wrapped)
@@ -68,11 +88,39 @@ mod tests {
             Path::new("example.txt"),
             "hello world",
             false,
+            true,
             120,
         )
         .unwrap();
 
         assert_eq!(rendered, "hello world");
+    }
+
+    #[test]
+    fn formats_markdown_tables_before_wrapping() {
+        let source = "| a | b |\n| --- | --- |\n| 1 | 2 |\n";
+        let rendered = render(Path::new("doc.md"), source, false, true, 80).unwrap();
+
+        assert_eq!(
+            rendered,
+            "+---+---+\n| a | b |\n+---+---+\n| 1 | 2 |\n+---+---+\n"
+        );
+    }
+
+    #[test]
+    fn leaves_markdown_tables_alone_when_disabled() {
+        let source = "| a | b |\n| --- | --- |\n| 1 | 2 |\n";
+        let rendered = render(Path::new("doc.md"), source, false, false, 80).unwrap();
+
+        assert_eq!(rendered, source);
+    }
+
+    #[test]
+    fn does_not_format_tables_in_non_markdown_files() {
+        let source = "| a | b |\n| --- | --- |\n| 1 | 2 |\n";
+        let rendered = render(Path::new("notes.txt"), source, false, true, 80).unwrap();
+
+        assert_eq!(rendered, source);
     }
 
     #[test]
