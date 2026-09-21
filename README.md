@@ -9,6 +9,7 @@ A *small CLI* program for viewing text files in the terminal with custom width w
 - Word wrapping at a configurable column width (default 80).
 - Markdown tables redrawn as ASCII grid tables (enabled by default).
 - Markdown emphasis rendered with real terminal styling: `*italic*`, `**bold**` and `***both***`, with dimmed asterisks.
+- Markdown headings shown in bold, with dimmed `#` marks.
 - Optional pagination.
 - Persistent settings above can be set in a TOML config file.
 
@@ -96,7 +97,7 @@ In markdown files (`.md`, `.markdown`, `.mdown`, `.mkd`, `.mdx`), pipe tables ar
 
 Use `-t off` or `table = "off"` in the config to print the original markdown instead.
 
-## Markdown emphasis
+## Markdown emphasis and headings
 
 In markdown files, asterisk emphasis is printed with the terminal's own styling: `*one asterisk*` is
 italic, `**two**` is bold and `***three***` is both. The asterisks are kept, but carry no emphasis
@@ -109,6 +110,13 @@ delimiter fades to the same gray, whatever color the syntax highlighter gave it.
 - Fenced code blocks, indented code blocks and inline code spans are left as written, so `**kwargs`
   in a code sample stays plain. Escaped markers (`\*\*`) are left alone too.
 - Styling is applied after wrapping, so it adds no width and leaves table columns aligned.
+
+Headings get the same treatment: the text after `#`, `##`, `###` and so on is bold, and the `#`
+marks are dimmed to the same gray as the asterisks.
+
+- Emphasis inside a heading still applies, on top of the heading's bold.
+- A heading long enough to wrap stays bold across the lines it wrapped onto.
+- `#hashtag`, `C#` and a `#` inside a code block are left alone, as are more than six `#` marks.
 
 Terminals without italic support fall back to their own substitute (often the normal or the inverse
 style); bold and color are supported everywhere.

@@ -1,5 +1,7 @@
 # Sample Markdown Document
 
+## A subtitle with *emphasis* in it
+
 This is a long paragraph that should wrap at one hundred columns by word boundaries rather than at the terminal edge or by breaking individual characters in the middle of words when displayed in the terminal.
 
 ## Code

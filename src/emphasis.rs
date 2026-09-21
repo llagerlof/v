@@ -1,8 +1,11 @@
-//! Terminal styling for markdown emphasis.
+//! Terminal styling for markdown emphasis and headings.
 //!
 //! Runs last in the render pipeline, on text that may already carry syntax
 //! highlighting escapes: `*text*` is shown italic and `**text**` bold (`***`
-//! being both), while the asterisks themselves stay unstyled and dimmed.
+//! being both), and `# Heading` text bold, while the asterisks and hashes
+//! themselves stay unstyled and dimmed.
+
+use unicode_width::UnicodeWidthStr;
 
 /// Bold on.
 const BOLD_ON: &str = "\x1b[1m";
@@ -20,6 +23,10 @@ const MARKER_COLOR: &str = "\x1b[38;2;96;96;96m";
 const DEFAULT_COLOR: &str = "\x1b[39m";
 /// Longest run of asterisks that opens a span; also the delimiter source.
 const MARKERS: &str = "***";
+/// Deepest ATX heading level.
+const MAX_HEADING_LEVEL: usize = 6;
+/// Deepest indent an ATX heading may carry.
+const MAX_HEADING_INDENT: usize = 3;
 
 /// The emphasis a run of asterisks turns on.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -45,22 +52,27 @@ impl Emphasis {
     }
 }
 
-/// Render `*italic*`, `**bold**` and `***both***` spans, with dimmed asterisks.
+/// Render `*italic*`, `**bold**` and `***both***` spans and `# Heading` text,
+/// with dimmed asterisks and hashes.
 ///
 /// Spans may cross wrapped lines but not blank lines; fenced and indented code
-/// blocks, and inline code spans, are left as written.
-pub fn style_emphasis(content: &str) -> String {
-    if !content.contains('*') {
+/// blocks, and inline code spans, are left as written. `width` is the wrap
+/// width the text was laid out at, used to follow a heading that wrapped onto
+/// the next line.
+pub fn style_emphasis(content: &str, width: usize) -> String {
+    if !content.contains('*') && !content.contains('#') {
         return content.to_string();
     }
 
+    let lines: Vec<&str> = content.split_inclusive('\n').collect();
     let mut output = String::with_capacity(content.len() + content.len() / 8);
     let mut chunk = String::new();
     let mut in_fence = false;
     let mut in_indented_code = false;
+    let mut in_heading = false;
     let mut prev_space = true;
 
-    for line in content.split_inclusive('\n') {
+    for (index, line) in lines.iter().enumerate() {
         let plain = strip_ansi(line);
         let trimmed = plain.trim();
 
@@ -68,6 +80,7 @@ pub fn style_emphasis(content: &str) -> String {
             flush(&mut chunk, &mut output);
             in_fence = !in_fence;
             in_indented_code = false;
+            in_heading = false;
             prev_space = false;
             output.push_str(line);
             continue;
@@ -82,6 +95,7 @@ pub fn style_emphasis(content: &str) -> String {
         if trimmed.is_empty() {
             flush(&mut chunk, &mut output);
             output.push_str(line);
+            in_heading = false;
             prev_space = true;
             continue;
         }
@@ -96,7 +110,22 @@ pub fn style_emphasis(content: &str) -> String {
 
         if in_indented_code {
             flush(&mut chunk, &mut output);
+            in_heading = false;
             output.push_str(line);
+            continue;
+        }
+
+        // The rest of a heading that word wrapping pushed onto its own line.
+        if in_heading {
+            push_heading_text(line, "", &mut output);
+            in_heading = wraps_onto_next(&plain, lines.get(index + 1), width);
+            continue;
+        }
+
+        if let Some(marks) = heading_marks(line) {
+            flush(&mut chunk, &mut output);
+            push_heading(line, marks, &mut output);
+            in_heading = wraps_onto_next(&plain, lines.get(index + 1), width);
             continue;
         }
 
@@ -105,6 +134,97 @@ pub fn style_emphasis(content: &str) -> String {
 
     flush(&mut chunk, &mut output);
     output
+}
+
+/// Byte range of the leading `#` run of an ATX heading, or `None` when the line
+/// is not one.
+fn heading_marks(line: &str) -> Option<(usize, usize)> {
+    let bytes = line.as_bytes();
+    let mut index = skip_ansi(bytes, 0);
+
+    for _ in 0..=MAX_HEADING_INDENT {
+        if bytes.get(index) != Some(&b' ') {
+            break;
+        }
+        index = skip_ansi(bytes, index + 1);
+    }
+
+    let start = index;
+    while bytes.get(index) == Some(&b'#') {
+        index += 1;
+    }
+    let level = index - start;
+    if level == 0 || level > MAX_HEADING_LEVEL {
+        return None;
+    }
+
+    // `#hashtag` is not a heading; `#` alone on its line is.
+    match bytes.get(skip_ansi(bytes, index)) {
+        None | Some(b' ') | Some(b'\t') | Some(b'\n') | Some(b'\r') => Some((start, index)),
+        _ => None,
+    }
+}
+
+/// Emit a heading line: its `#` run dimmed, its text bold.
+fn push_heading(line: &str, marks: (usize, usize), output: &mut String) {
+    let (start, end) = marks;
+
+    output.push_str(&line[..start]);
+    let color = trailing_foreground(&line[..start], "");
+
+    output.push_str(MARKER_COLOR);
+    output.push_str(&line[start..end]);
+    output.push_str(if color.is_empty() {
+        DEFAULT_COLOR
+    } else {
+        color
+    });
+
+    push_heading_text(&line[end..], color, output);
+}
+
+/// Emit heading text in bold, keeping any emphasis inside it.
+fn push_heading_text<'a>(text: &'a str, color: &'a str, output: &mut String) {
+    let (text, ending) = split_line_ending(text);
+
+    output.push_str(BOLD_ON);
+    style_chunk(
+        text,
+        output,
+        Emphasis {
+            bold: true,
+            italic: false,
+        },
+        color,
+    );
+    output.push_str(NORMAL_INTENSITY);
+    output.push_str(ending);
+}
+
+fn split_line_ending(line: &str) -> (&str, &str) {
+    match line.strip_suffix('\n') {
+        Some(rest) => line.split_at(rest.strip_suffix('\r').unwrap_or(rest).len()),
+        None => (line, ""),
+    }
+}
+
+/// Whether word wrapping at `width` would have pushed the start of `next` onto
+/// its own line, meaning it continues the current one.
+fn wraps_onto_next(plain: &str, next: Option<&&str>, width: usize) -> bool {
+    if width == 0 {
+        return false;
+    }
+
+    let Some(next) = next else {
+        return false;
+    };
+    let next = strip_ansi(next);
+    let Some(word) = next.split_whitespace().next() else {
+        return false;
+    };
+
+    let used = UnicodeWidthStr::width(plain.trim_end());
+    used + 1 + UnicodeWidthStr::width(word) > width
 }
 
 fn flush(chunk: &mut String, output: &mut String) {
@@ -204,7 +324,11 @@ fn push_marker(marker: &str, before: Emphasis, after: Emphasis, color: &str, out
 
     output.push_str(MARKER_COLOR);
     output.push_str(marker);
-    output.push_str(if color.is_empty() { DEFAULT_COLOR } else { color });
+    output.push_str(if color.is_empty() {
+        DEFAULT_COLOR
+    } else {
+        color
+    });
 
     if after.bold {
         output.push_str(BOLD_ON);
@@ -422,10 +546,15 @@ mod tests {
     /// Foreground restored after a delimiter, when no color was in effect.
     const UNDIM: &str = "\x1b[39m";
 
+    /// Style at the default wrap width.
+    fn style(content: &str) -> String {
+        style_emphasis(content, 80)
+    }
+
     #[test]
     fn bolds_content_and_fades_the_asterisks() {
         assert_eq!(
-            style_emphasis("a **bold** b"),
+            style("a **bold** b"),
             format!("a {DIM}**{UNDIM}{BOLD}bold{OFF}{DIM}**{UNDIM} b")
         );
     }
@@ -433,7 +562,7 @@ mod tests {
     #[test]
     fn italicizes_content_and_fades_the_asterisks() {
         assert_eq!(
-            style_emphasis("a *slanted* b"),
+            style("a *slanted* b"),
             format!("a {DIM}*{UNDIM}{ITALIC}slanted{ITALIC_END}{DIM}*{UNDIM} b")
         );
     }
@@ -441,14 +570,14 @@ mod tests {
     #[test]
     fn treats_three_asterisks_as_bold_italic() {
         assert_eq!(
-            style_emphasis("***both***"),
+            style("***both***"),
             format!("{DIM}***{UNDIM}{BOLD}{ITALIC}both{OFF}{ITALIC_END}{DIM}***{UNDIM}")
         );
     }
 
     #[test]
     fn styles_emphasis_nested_inside_bold() {
-        let styled = style_emphasis("**bold *and italic* again**");
+        let styled = style("**bold *and italic* again**");
         // The inner delimiters drop both attributes, then restore the bold.
         assert!(
             styled.contains(&format!("{OFF}{DIM}*{UNDIM}{BOLD}{ITALIC}and")),
@@ -463,19 +592,19 @@ mod tests {
 
     #[test]
     fn leaves_text_without_markers_untouched() {
-        let input = "# Title\n\nplain text\n";
-        assert_eq!(style_emphasis(input), input);
+        let input = "Title\n\nplain text\n";
+        assert_eq!(style(input), input);
     }
 
     #[test]
     fn leaves_lone_asterisks_alone() {
         let input = "* a list item\n* 2 * 3 = 6\n* globs *.rs and *.md\n";
-        assert_eq!(style_emphasis(input), input);
+        assert_eq!(style(input), input);
     }
 
     #[test]
     fn styles_several_spans_on_one_line() {
-        let styled = style_emphasis("**one** and **two**");
+        let styled = style("**one** and **two**");
         assert_eq!(styled.matches(BOLD).count(), 2);
         assert_eq!(styled.matches(DIM).count(), 4);
         assert_eq!(styled.matches("**").count(), 4);
@@ -483,7 +612,7 @@ mod tests {
 
     #[test]
     fn spans_may_cross_a_wrapped_line() {
-        let styled = style_emphasis("**bold text\nkeeps going** after\n");
+        let styled = style("**bold text\nkeeps going** after\n");
         assert_eq!(
             styled,
             format!("{DIM}**{UNDIM}{BOLD}bold text\nkeeps going{OFF}{DIM}**{UNDIM} after\n")
@@ -493,56 +622,59 @@ mod tests {
     #[test]
     fn spans_do_not_cross_a_blank_line() {
         let input = "**open\n\nclose** text\n";
-        assert_eq!(style_emphasis(input), input);
+        assert_eq!(style(input), input);
     }
 
     #[test]
     fn ignores_unmatched_and_whitespace_padded_markers() {
-        assert_eq!(style_emphasis("2 ** 3 and **unclosed"), "2 ** 3 and **unclosed");
+        assert_eq!(style("2 ** 3 and **unclosed"), "2 ** 3 and **unclosed");
     }
 
     #[test]
     fn requires_the_closing_run_to_match_the_opening_one() {
         let input = "**bold* leftovers\n";
-        assert_eq!(style_emphasis(input), input);
+        assert_eq!(style(input), input);
     }
 
     #[test]
     fn ignores_markers_inside_fenced_code() {
         let input = "```python\ndef f(**kwargs):\n    pass\n```\n";
-        assert_eq!(style_emphasis(input), input);
+        assert_eq!(style(input), input);
     }
 
     #[test]
     fn ignores_markers_inside_indented_code() {
         let input = "text\n\n    def f(**kwargs):\n        return **kwargs\n\nmore\n";
-        assert_eq!(style_emphasis(input), input);
+        assert_eq!(style(input), input);
     }
 
     #[test]
     fn ignores_markers_inside_inline_code() {
         let input = "use `**kwargs` and `a * b` here\n";
-        assert_eq!(style_emphasis(input), input);
+        assert_eq!(style(input), input);
     }
 
     #[test]
     fn ignores_escaped_markers() {
         let input = "a \\*\\*not bold\\*\\* b, \\*plain\\* c\n";
-        assert_eq!(style_emphasis(input), input);
+        assert_eq!(style(input), input);
     }
 
     #[test]
     fn styles_markers_split_by_highlighting_escapes() {
-        let styled = style_emphasis("\x1b[38;2;1;2;3m**\x1b[38;2;4;5;6mbold\x1b[38;2;1;2;3m**");
+        let styled = style("\x1b[38;2;1;2;3m**\x1b[38;2;4;5;6mbold\x1b[38;2;1;2;3m**");
         assert!(styled.contains(&format!("{DIM}**")), "{styled:?}");
-        assert!(styled.contains(&format!("{BOLD}\x1b[38;2;4;5;6mbold")), "{styled:?}");
+        assert!(
+            styled.contains(&format!("{BOLD}\x1b[38;2;4;5;6mbold")),
+            "{styled:?}"
+        );
     }
 
     #[test]
     fn dims_every_delimiter_by_the_same_amount() {
         // syntect colors `*` and `**` differently; the delimiters must not.
-        let bold = style_emphasis("\x1b[38;2;255;255;208m**bold**");
-        let italic = style_emphasis("\x1b[38;2;255;213;255m*italic*");
+        let bold = style("\x1b[38;2;255;255;208m**bold**");
+        let italic = style("\x1b[38;2;255;213;255m*italic*");
         assert!(bold.contains(DIM), "{bold:?}");
         assert!(italic.contains(DIM), "{italic:?}");
     }
@@ -550,7 +682,7 @@ mod tests {
     #[test]
     fn restores_the_active_color_after_a_delimiter() {
         let color = "\x1b[38;2;1;2;3m";
-        let styled = style_emphasis(&format!("{color}**bold** tail"));
+        let styled = style(&format!("{color}**bold** tail"));
         assert_eq!(
             styled,
             format!("{color}{DIM}**{color}{BOLD}bold{OFF}{DIM}**{color} tail")
@@ -572,12 +704,93 @@ mod tests {
 
     #[test]
     fn keeps_table_cell_padding_intact() {
-        let styled = style_emphasis("| **a** | b |\n");
+        let styled = style("| **a** | b |\n");
         assert_eq!(strip_ansi(&styled), "| **a** | b |\n");
     }
 
     #[test]
     fn strips_escape_sequences_for_line_checks() {
         assert_eq!(strip_ansi("\x1b[38;2;1;2;3m```rust\x1b[0m"), "```rust");
+    }
+
+    #[test]
+    fn bolds_heading_text_and_dims_the_hashes() {
+        assert_eq!(
+            style("## Section\n"),
+            format!("{DIM}##{UNDIM}{BOLD} Section{OFF}\n")
+        );
+    }
+
+    #[test]
+    fn styles_every_heading_level() {
+        for level in 1..=MAX_HEADING_LEVEL {
+            let hashes = "#".repeat(level);
+            let styled = style(&format!("{hashes} Title\n"));
+            assert_eq!(
+                styled,
+                format!("{DIM}{hashes}{UNDIM}{BOLD} Title{OFF}\n"),
+                "level {level}"
+            );
+        }
+    }
+
+    #[test]
+    fn keeps_emphasis_inside_a_heading() {
+        let styled = style("# A *slanted* title\n");
+        assert!(
+            styled.contains(&format!("{OFF}{DIM}*{UNDIM}{BOLD}{ITALIC}slanted")),
+            "{styled:?}"
+        );
+        assert_eq!(strip_ansi(&styled), "# A *slanted* title\n");
+    }
+
+    #[test]
+    fn follows_a_heading_that_wrapped_onto_the_next_line() {
+        // As wrapped at 20 columns: the second line continues the heading.
+        let styled = style_emphasis("# a title that is\nlong\n\nplain\n", 20);
+        assert_eq!(
+            styled,
+            format!("{DIM}#{UNDIM}{BOLD} a title that is{OFF}\n{BOLD}long{OFF}\n\nplain\n")
+        );
+    }
+
+    #[test]
+    fn stops_following_a_heading_that_fits() {
+        let styled = style_emphasis("# short\nplain text\n", 20);
+        assert_eq!(
+            styled,
+            format!("{DIM}#{UNDIM}{BOLD} short{OFF}\nplain text\n")
+        );
+    }
+
+    #[test]
+    fn ignores_hashes_that_do_not_start_a_heading() {
+        let input = "#hashtag, C# and a # in prose\n     # over-indented\n####### too deep\n";
+        assert_eq!(style(input), input);
+    }
+
+    #[test]
+    fn ignores_hashes_inside_code_blocks() {
+        let fenced = "```bash\n# a comment\necho hi\n```\n";
+        assert_eq!(style(fenced), fenced);
+        let indented = "text\n\n    # a comment\n    echo hi\n\nmore\n";
+        assert_eq!(style(indented), indented);
+    }
+
+    #[test]
+    fn dims_hashes_in_the_syntax_color_of_the_delimiter() {
+        let color = "\x1b[38;2;1;2;3m";
+        assert_eq!(
+            style(&format!("{color}# Title\n")),
+            format!("{color}{DIM}#{color}{BOLD} Title{OFF}\n")
+        );
+    }
+
+    #[test]
+    fn keeps_heading_indentation_and_line_endings() {
+        assert_eq!(
+            style("  # Title\r\n"),
+            format!("  {DIM}#{UNDIM}{BOLD} Title{OFF}\r\n")
+        );
     }
 }

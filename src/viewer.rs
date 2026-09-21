@@ -78,10 +78,10 @@ fn render(
         wrapped
     };
 
-    // Strong emphasis is styled last, so it survives highlighting and adds only
-    // zero-width escapes to already wrapped lines.
+    // Emphasis and headings are styled last, so they survive highlighting and
+    // add only zero-width escapes to already wrapped lines.
     if markdown::is_markdown_path(path) {
-        Ok(emphasis::style_emphasis(&styled))
+        Ok(emphasis::style_emphasis(&styled, wrap_width))
     } else {
         Ok(styled)
     }
