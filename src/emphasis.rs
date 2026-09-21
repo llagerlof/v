@@ -2,18 +2,22 @@
 //!
 //! Runs last in the render pipeline, on text that may already carry syntax
 //! highlighting escapes: `*text*` is shown italic and `**text**` bold (`***`
-//! being both), while the asterisks themselves stay unstyled and faint.
+//! being both), while the asterisks themselves stay unstyled and dimmed.
 
 /// Bold on.
 const BOLD_ON: &str = "\x1b[1m";
-/// Faint (dim) on.
-const FAINT_ON: &str = "\x1b[2m";
 /// Italic on.
 const ITALIC_ON: &str = "\x1b[3m";
-/// Normal intensity: clears both bold and faint, leaving colors untouched.
+/// Normal intensity: clears bold, leaving colors untouched.
 const NORMAL_INTENSITY: &str = "\x1b[22m";
 /// Italic off, leaving colors and intensity untouched.
 const ITALIC_OFF: &str = "\x1b[23m";
+/// Dim gray for the delimiters: a fixed color rather than the syntax color of
+/// the moment, so every delimiter fades by the same amount, and rather than
+/// faint (`\x1b[2m`), which terminals dim by wildly different amounts.
+const MARKER_COLOR: &str = "\x1b[38;2;96;96;96m";
+/// Default foreground, restored after a delimiter when no color was active.
+const DEFAULT_COLOR: &str = "\x1b[39m";
 /// Longest run of asterisks that opens a span; also the delimiter source.
 const MARKERS: &str = "***";
 
@@ -41,7 +45,7 @@ impl Emphasis {
     }
 }
 
-/// Render `*italic*`, `**bold**` and `***both***` spans, with faint asterisks.
+/// Render `*italic*`, `**bold**` and `***both***` spans, with dimmed asterisks.
 ///
 /// Spans may cross wrapped lines but not blank lines; fenced and indented code
 /// blocks, and inline code spans, are left as written.
@@ -105,19 +109,29 @@ pub fn style_emphasis(content: &str) -> String {
 
 fn flush(chunk: &mut String, output: &mut String) {
     if !chunk.is_empty() {
-        style_chunk(chunk, output, Emphasis::default());
+        style_chunk(chunk, output, Emphasis::default(), "");
         chunk.clear();
     }
 }
 
-/// Style one run of consecutive text lines, nested inside `active` emphasis.
-fn style_chunk(chunk: &str, output: &mut String, active: Emphasis) {
+/// Style one run of consecutive text lines, nested inside `active` emphasis and
+/// `color` (the foreground already in effect). Returns the foreground left in
+/// effect at the end, so delimiters can restore it.
+fn style_chunk<'a>(
+    chunk: &'a str,
+    output: &mut String,
+    active: Emphasis,
+    color: &'a str,
+) -> &'a str {
     let bytes = chunk.as_bytes();
+    let mut color = color;
     let mut index = 0;
 
     while index < bytes.len() {
         if let Some(end) = ansi_escape_end(bytes, index) {
-            output.push_str(&chunk[index..end]);
+            let sequence = &chunk[index..end];
+            output.push_str(sequence);
+            color = foreground_after(sequence, color);
             index = end;
             continue;
         }
@@ -130,14 +144,16 @@ fn style_chunk(chunk: &str, output: &mut String, active: Emphasis) {
             }
             b'`' => {
                 let end = code_span_end(chunk, index);
-                output.push_str(&chunk[index..end]);
+                let span = &chunk[index..end];
+                output.push_str(span);
+                color = trailing_foreground(span, color);
                 index = end;
             }
             b'*' => {
                 let run = asterisk_run(bytes, index);
                 match span_close(chunk, index, run) {
                     Some(close) => {
-                        push_span(&chunk[index + run..close], run, active, output);
+                        color = push_span(&chunk[index + run..close], run, active, color, output);
                         index = close + run;
                     }
                     None => {
@@ -153,21 +169,32 @@ fn style_chunk(chunk: &str, output: &mut String, active: Emphasis) {
             }
         }
     }
+
+    color
 }
 
-/// Emit one emphasized span, its delimiters faint and unstyled.
-fn push_span(content: &str, run: usize, active: Emphasis, output: &mut String) {
+/// Emit one emphasized span, its delimiters dimmed and unstyled, and return the
+/// foreground left in effect.
+fn push_span<'a>(
+    content: &'a str,
+    run: usize,
+    active: Emphasis,
+    color: &'a str,
+    output: &mut String,
+) -> &'a str {
     let marker = &MARKERS[..run];
     let inner = active.merge(Emphasis::from_run(run));
 
-    push_marker(marker, active, inner, output);
-    style_chunk(content, output, inner);
-    push_marker(marker, inner, active, output);
+    push_marker(marker, active, inner, color, output);
+    let trailing = style_chunk(content, output, inner, color);
+    push_marker(marker, inner, active, trailing, output);
+
+    trailing
 }
 
-/// Emit a delimiter faint and unstyled, dropping the emphasis in effect
-/// `before` it and restoring the one that applies `after`.
-fn push_marker(marker: &str, before: Emphasis, after: Emphasis, output: &mut String) {
+/// Emit a delimiter dimmed and unstyled: drop the emphasis in effect `before`
+/// it, then restore `color` and the emphasis that applies `after`.
+fn push_marker(marker: &str, before: Emphasis, after: Emphasis, color: &str, output: &mut String) {
     if before.bold {
         output.push_str(NORMAL_INTENSITY);
     }
@@ -175,10 +202,9 @@ fn push_marker(marker: &str, before: Emphasis, after: Emphasis, output: &mut Str
         output.push_str(ITALIC_OFF);
     }
 
-    output.push_str(FAINT_ON);
+    output.push_str(MARKER_COLOR);
     output.push_str(marker);
-    // Also clears the faint above, so the delimiter alone is dimmed.
-    output.push_str(NORMAL_INTENSITY);
+    output.push_str(if color.is_empty() { DEFAULT_COLOR } else { color });
 
     if after.bold {
         output.push_str(BOLD_ON);
@@ -186,6 +212,53 @@ fn push_marker(marker: &str, before: Emphasis, after: Emphasis, output: &mut Str
     if after.italic {
         output.push_str(ITALIC_ON);
     }
+}
+
+/// The foreground left in effect by an escape sequence: the sequence itself
+/// when it sets a color, an empty string when it resets to the default, and the
+/// unchanged `color` otherwise.
+fn foreground_after<'a>(sequence: &'a str, color: &'a str) -> &'a str {
+    let Some(params) = sequence
+        .strip_prefix("\x1b[")
+        .and_then(|rest| rest.strip_suffix('m'))
+    else {
+        return color;
+    };
+
+    if params.starts_with("38;") {
+        return sequence;
+    }
+
+    let mut result = color;
+    for param in params.split(';') {
+        match param.parse::<u16>() {
+            Ok(0) | Ok(39) => result = "",
+            Ok(30..=37) | Ok(90..=97) => result = sequence,
+            Err(_) if param.is_empty() => result = "",
+            _ => {}
+        }
+    }
+
+    result
+}
+
+/// The foreground left in effect by every escape sequence in `text`.
+fn trailing_foreground<'a>(text: &'a str, color: &'a str) -> &'a str {
+    let bytes = text.as_bytes();
+    let mut color = color;
+    let mut index = 0;
+
+    while index < bytes.len() {
+        match ansi_escape_end(bytes, index) {
+            Some(end) => {
+                color = foreground_after(&text[index..end], color);
+                index = end;
+            }
+            None => index += char_len(text, index),
+        }
+    }
+
+    color
 }
 
 /// Length of the run of asterisks starting at `index`.
@@ -341,16 +414,19 @@ mod tests {
     use super::*;
 
     const BOLD: &str = "\x1b[1m";
-    const FAINT: &str = "\x1b[2m";
     const ITALIC: &str = "\x1b[3m";
     const OFF: &str = "\x1b[22m";
     const ITALIC_END: &str = "\x1b[23m";
+    /// Dim gray a delimiter is painted in.
+    const DIM: &str = "\x1b[38;2;96;96;96m";
+    /// Foreground restored after a delimiter, when no color was in effect.
+    const UNDIM: &str = "\x1b[39m";
 
     #[test]
     fn bolds_content_and_fades_the_asterisks() {
         assert_eq!(
             style_emphasis("a **bold** b"),
-            format!("a {FAINT}**{OFF}{BOLD}bold{OFF}{FAINT}**{OFF} b")
+            format!("a {DIM}**{UNDIM}{BOLD}bold{OFF}{DIM}**{UNDIM} b")
         );
     }
 
@@ -358,7 +434,7 @@ mod tests {
     fn italicizes_content_and_fades_the_asterisks() {
         assert_eq!(
             style_emphasis("a *slanted* b"),
-            format!("a {FAINT}*{OFF}{ITALIC}slanted{ITALIC_END}{FAINT}*{OFF} b")
+            format!("a {DIM}*{UNDIM}{ITALIC}slanted{ITALIC_END}{DIM}*{UNDIM} b")
         );
     }
 
@@ -366,7 +442,7 @@ mod tests {
     fn treats_three_asterisks_as_bold_italic() {
         assert_eq!(
             style_emphasis("***both***"),
-            format!("{FAINT}***{OFF}{BOLD}{ITALIC}both{OFF}{ITALIC_END}{FAINT}***{OFF}")
+            format!("{DIM}***{UNDIM}{BOLD}{ITALIC}both{OFF}{ITALIC_END}{DIM}***{UNDIM}")
         );
     }
 
@@ -374,8 +450,14 @@ mod tests {
     fn styles_emphasis_nested_inside_bold() {
         let styled = style_emphasis("**bold *and italic* again**");
         // The inner delimiters drop both attributes, then restore the bold.
-        assert!(styled.contains(&format!("{OFF}{FAINT}*{OFF}{BOLD}{ITALIC}and")), "{styled:?}");
-        assert!(styled.contains(&format!("italic{OFF}{ITALIC_END}{FAINT}*{OFF}{BOLD} again")), "{styled:?}");
+        assert!(
+            styled.contains(&format!("{OFF}{DIM}*{UNDIM}{BOLD}{ITALIC}and")),
+            "{styled:?}"
+        );
+        assert!(
+            styled.contains(&format!("italic{OFF}{ITALIC_END}{DIM}*{UNDIM}{BOLD} again")),
+            "{styled:?}"
+        );
         assert_eq!(strip_ansi(&styled), "**bold *and italic* again**");
     }
 
@@ -395,6 +477,7 @@ mod tests {
     fn styles_several_spans_on_one_line() {
         let styled = style_emphasis("**one** and **two**");
         assert_eq!(styled.matches(BOLD).count(), 2);
+        assert_eq!(styled.matches(DIM).count(), 4);
         assert_eq!(styled.matches("**").count(), 4);
     }
 
@@ -403,7 +486,7 @@ mod tests {
         let styled = style_emphasis("**bold text\nkeeps going** after\n");
         assert_eq!(
             styled,
-            format!("{FAINT}**{OFF}{BOLD}bold text\nkeeps going{OFF}{FAINT}**{OFF} after\n")
+            format!("{DIM}**{UNDIM}{BOLD}bold text\nkeeps going{OFF}{DIM}**{UNDIM} after\n")
         );
     }
 
@@ -451,8 +534,40 @@ mod tests {
     #[test]
     fn styles_markers_split_by_highlighting_escapes() {
         let styled = style_emphasis("\x1b[38;2;1;2;3m**\x1b[38;2;4;5;6mbold\x1b[38;2;1;2;3m**");
-        assert!(styled.contains(&format!("{FAINT}**{OFF}")), "{styled:?}");
+        assert!(styled.contains(&format!("{DIM}**")), "{styled:?}");
         assert!(styled.contains(&format!("{BOLD}\x1b[38;2;4;5;6mbold")), "{styled:?}");
+    }
+
+    #[test]
+    fn dims_every_delimiter_by_the_same_amount() {
+        // syntect colors `*` and `**` differently; the delimiters must not.
+        let bold = style_emphasis("\x1b[38;2;255;255;208m**bold**");
+        let italic = style_emphasis("\x1b[38;2;255;213;255m*italic*");
+        assert!(bold.contains(DIM), "{bold:?}");
+        assert!(italic.contains(DIM), "{italic:?}");
+    }
+
+    #[test]
+    fn restores_the_active_color_after_a_delimiter() {
+        let color = "\x1b[38;2;1;2;3m";
+        let styled = style_emphasis(&format!("{color}**bold** tail"));
+        assert_eq!(
+            styled,
+            format!("{color}{DIM}**{color}{BOLD}bold{OFF}{DIM}**{color} tail")
+        );
+    }
+
+    #[test]
+    fn tracks_the_foreground_across_escape_sequences() {
+        let color = "\x1b[38;2;1;2;3m";
+        assert_eq!(foreground_after(color, ""), color);
+        assert_eq!(foreground_after("\x1b[31m", ""), "\x1b[31m");
+        assert_eq!(foreground_after("\x1b[0m", color), "");
+        assert_eq!(foreground_after("\x1b[39m", color), "");
+        // Not a foreground change: keep what was already in effect.
+        assert_eq!(foreground_after("\x1b[1m", color), color);
+        assert_eq!(foreground_after("\x1b[48;2;1;2;3m", color), color);
+        assert_eq!(trailing_foreground(&format!("a{color}b\x1b[0mc"), "x"), "");
     }
 
     #[test]
