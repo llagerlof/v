@@ -10,6 +10,7 @@ A *small CLI* program for viewing text files in the terminal with custom width w
 - Markdown tables redrawn as ASCII grid tables (enabled by default).
 - Markdown emphasis rendered with real terminal styling: `*italic*`, `**bold**` and `***both***`, with dimmed asterisks.
 - Markdown headings shown in bold, with dimmed `#` marks.
+- Markdown list item markers (`-` and `*`) shown in bold.
 - Optional pagination.
 - Persistent settings above can be set in a TOML config file.
 
@@ -106,7 +107,7 @@ delimiter fades to the same gray, whatever color the syntax highlighter gave it.
 
 - Emphasis nests: in `**bold *and italic* again**`, the inner span is both.
 - A span may cross a wrapped line, but not a blank line.
-- A delimiter must hug its text, so `2 * 3`, `*.rs` globs and `* list item` markers stay plain.
+- A delimiter must hug its text, so `2 * 3`, `*.rs` globs and `* list item` markers open nothing.
 - Fenced code blocks, indented code blocks and inline code spans are left as written, so `**kwargs`
   in a code sample stays plain. Escaped markers (`\*\*`) are left alone too.
 - Styling is applied after wrapping, so it adds no width and leaves table columns aligned.
@@ -117,6 +118,13 @@ marks are dimmed to the same gray as the asterisks.
 - Emphasis inside a heading still applies, on top of the heading's bold.
 - A heading long enough to wrap stays bold across the lines it wrapped onto.
 - `#hashtag`, `C#` and a `#` inside a code block are left alone, as are more than six `#` marks.
+
+List item markers are bold too: the `-` or `*` that opens a list item, at any indentation, keeps its
+color but is printed bold so bullets stand out from the text they introduce.
+
+- Only a marker followed by a space, a tab or the end of the line counts, so `well-known`, `2 * 3`
+  and an `em -- dash` stay plain.
+- Thematic breaks (`---`, `* * *`) and markers inside code blocks are left alone.
 
 Terminals without italic support fall back to their own substitute (often the normal or the inverse
 style); bold and color are supported everywhere.

@@ -3,7 +3,8 @@
 //! Runs last in the render pipeline, on text that may already carry syntax
 //! highlighting escapes: `*text*` is shown italic and `**text**` bold (`***`
 //! being both), and `# Heading` text bold, while the asterisks and hashes
-//! themselves stay unstyled and dimmed.
+//! themselves stay unstyled and dimmed. List item markers are bold, so bullets
+//! stand out from the text they introduce.
 
 use unicode_width::UnicodeWidthStr;
 
@@ -27,6 +28,8 @@ const MARKERS: &str = "***";
 const MAX_HEADING_LEVEL: usize = 6;
 /// Deepest indent an ATX heading may carry.
 const MAX_HEADING_INDENT: usize = 3;
+/// Markers a thematic break (`---`, `* * *`) needs at least.
+const MIN_THEMATIC_BREAK: usize = 3;
 
 /// The emphasis a run of asterisks turns on.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -53,14 +56,14 @@ impl Emphasis {
 }
 
 /// Render `*italic*`, `**bold**` and `***both***` spans and `# Heading` text,
-/// with dimmed asterisks and hashes.
+/// with dimmed asterisks and hashes, and bold `-` and `*` list item markers.
 ///
 /// Spans may cross wrapped lines but not blank lines; fenced and indented code
 /// blocks, and inline code spans, are left as written. `width` is the wrap
 /// width the text was laid out at, used to follow a heading that wrapped onto
 /// the next line.
 pub fn style_emphasis(content: &str, width: usize) -> String {
-    if !content.contains('*') && !content.contains('#') {
+    if !content.contains('*') && !content.contains('#') && !content.contains('-') {
         return content.to_string();
     }
 
@@ -248,6 +251,22 @@ fn style_chunk<'a>(
     let mut index = 0;
 
     while index < bytes.len() {
+        // A list item marker, when this is the start of a line and the text is
+        // not bold already.
+        if !active.bold
+            && (index == 0 || bytes[index - 1] == b'\n')
+            && let Some((start, end)) = bullet_marker(chunk, index)
+        {
+            let indent = &chunk[index..start];
+            output.push_str(indent);
+            color = trailing_foreground(indent, color);
+            output.push_str(BOLD_ON);
+            output.push_str(&chunk[start..end]);
+            output.push_str(NORMAL_INTENSITY);
+            index = end;
+            continue;
+        }
+
         if let Some(end) = ansi_escape_end(bytes, index) {
             let sequence = &chunk[index..end];
             output.push_str(sequence);
@@ -383,6 +402,57 @@ fn trailing_foreground<'a>(text: &'a str, color: &'a str) -> &'a str {
     }
 
     color
+}
+
+/// Byte range of the `-` or `*` that marks a list item on the line starting at
+/// `index`, or `None` when the line does not start one.
+fn bullet_marker(chunk: &str, index: usize) -> Option<(usize, usize)> {
+    let bytes = chunk.as_bytes();
+    let mut start = skip_ansi(bytes, index);
+    while matches!(bytes.get(start), Some(b' ' | b'\t')) {
+        start = skip_ansi(bytes, start + 1);
+    }
+
+    let end = match bytes.get(start) {
+        Some(b'-') => start + 1,
+        // One asterisk only: `**bold**` opening a line is not a bullet.
+        Some(b'*') if asterisk_run(bytes, start) == 1 => start + 1,
+        _ => return None,
+    };
+
+    // The marker must be followed by the item's text, or end the line, and a
+    // run of markers on a line of its own is a thematic break, not a bullet.
+    match bytes.get(skip_ansi(bytes, end)) {
+        None | Some(b' ' | b'\t' | b'\n' | b'\r') if !is_thematic_break(chunk, start) => {
+            Some((start, end))
+        }
+        _ => None,
+    }
+}
+
+/// Whether the line starting at `index` holds nothing but three or more of the
+/// same marker and spaces, as `---` and `* * *` do.
+fn is_thematic_break(chunk: &str, index: usize) -> bool {
+    let bytes = chunk.as_bytes();
+    let marker = bytes[index];
+    let mut count = 0;
+    let mut cursor = index;
+
+    while cursor < bytes.len() {
+        if let Some(end) = ansi_escape_end(bytes, cursor) {
+            cursor = end;
+            continue;
+        }
+        match bytes[cursor] {
+            byte if byte == marker => count += 1,
+            b' ' | b'\t' => {}
+            b'\n' | b'\r' => break,
+            _ => return false,
+        }
+        cursor += 1;
+    }
+
+    count >= MIN_THEMATIC_BREAK
 }
 
 /// Length of the run of asterisks starting at `index`.
@@ -598,7 +668,69 @@ mod tests {
 
     #[test]
     fn leaves_lone_asterisks_alone() {
+        // The bullets turn bold, but none of them opens an emphasis span.
         let input = "* a list item\n* 2 * 3 = 6\n* globs *.rs and *.md\n";
+        let styled = style(input);
+        assert_eq!(strip_ansi(&styled), input);
+        assert!(!styled.contains(ITALIC), "{styled:?}");
+        assert_eq!(styled.matches(BOLD).count(), 3);
+    }
+
+    #[test]
+    fn bolds_list_item_markers() {
+        assert_eq!(
+            style("- first\n* second\n"),
+            format!("{BOLD}-{OFF} first\n{BOLD}*{OFF} second\n")
+        );
+    }
+
+    #[test]
+    fn bolds_nested_list_markers_and_keeps_the_indent() {
+        assert_eq!(
+            style("- top\n  - nested\n\t- tabbed\n"),
+            format!("{BOLD}-{OFF} top\n  {BOLD}-{OFF} nested\n\t{BOLD}-{OFF} tabbed\n")
+        );
+    }
+
+    #[test]
+    fn bolds_an_empty_list_item_marker() {
+        assert_eq!(style("- \n-\n"), format!("{BOLD}-{OFF} \n{BOLD}-{OFF}\n"));
+    }
+
+    #[test]
+    fn keeps_emphasis_inside_a_list_item() {
+        assert_eq!(
+            style("- a **bold** item\n"),
+            format!("{BOLD}-{OFF} a {DIM}**{UNDIM}{BOLD}bold{OFF}{DIM}**{UNDIM} item\n")
+        );
+    }
+
+    #[test]
+    fn restores_the_active_color_after_a_list_marker() {
+        let color = "\x1b[38;2;1;2;3m";
+        assert_eq!(
+            style(&format!("{color}- item **bold**\n")),
+            format!("{color}{BOLD}-{OFF} item {DIM}**{color}{BOLD}bold{OFF}{DIM}**{color}\n")
+        );
+    }
+
+    #[test]
+    fn leaves_hyphens_that_do_not_start_a_list_alone() {
+        let input = "well-known text\n- - -\n---\n***\nem -- dash\n";
+        assert_eq!(style(input), input);
+    }
+
+    #[test]
+    fn leaves_list_markers_inside_code_blocks_alone() {
+        let fenced = "```sh\n- not a list\n```\n";
+        assert_eq!(style(fenced), fenced);
+        let indented = "text\n\n    - not a list\n\nmore\n";
+        assert_eq!(style(indented), indented);
+    }
+
+    #[test]
+    fn leaves_table_rows_alone() {
+        let input = "| - | b |\n";
         assert_eq!(style(input), input);
     }
 

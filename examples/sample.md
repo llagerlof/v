@@ -14,6 +14,13 @@ fn main() {
 
 **Bold text**, *italic text*, ***both***, and **nested *emphasis* inside** with more words to test wrapping behavior across multiple highlighted spans in a single line of markdown content here.
 
+## Lists
+
+- A hyphen bullet, with the marker in bold
+- Another item, this one with **bold** and *italic* text inside it
+  - A nested item, indented under the one above
+* An asterisk bullet
+
 ## Table
 
 | Option | Default | Description |
