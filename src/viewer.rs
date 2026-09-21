@@ -3,6 +3,7 @@ use std::io::{self, Write};
 use std::path::Path;
 
 use crate::cli::ResolvedCli;
+use crate::emphasis;
 use crate::highlight;
 use crate::markdown;
 use crate::pager;
@@ -71,10 +72,18 @@ fn render(
 
     let wrapped = wrap::wrap_plain_text(&content, wrap_width);
 
-    if syntax_enabled {
-        highlight::highlight_file(path, &wrapped)
+    let styled = if syntax_enabled {
+        highlight::highlight_file(path, &wrapped)?
     } else {
-        Ok(wrapped)
+        wrapped
+    };
+
+    // Strong emphasis is styled last, so it survives highlighting and adds only
+    // zero-width escapes to already wrapped lines.
+    if markdown::is_markdown_path(path) {
+        Ok(emphasis::style_strong(&styled))
+    } else {
+        Ok(styled)
     }
 }
 

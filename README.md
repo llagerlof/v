@@ -8,6 +8,7 @@ A small CLI program for viewing text files in the terminal with custom width wor
 - Syntax highlighting based on the file extension (enabled by default).
 - Word wrapping at a configurable column width (default 80).
 - Markdown tables redrawn as ASCII grid tables (enabled by default).
+- Markdown `**bold**` text shown in bold, with faint asterisks.
 - Optional pagination.
 - Persistent settings above can be set in a TOML config file.
 
@@ -94,6 +95,16 @@ In markdown files (`.md`, `.markdown`, `.mdown`, `.mkd`, `.mdx`), pipe tables ar
 - Tables inside fenced or indented code blocks are left untouched, as is a table too wide to fit even at its minimum column width.
 
 Use `-t off` or `table = "off"` in the config to print the original markdown instead.
+
+## Markdown bold
+
+In markdown files, text wrapped in double asterisks is printed in bold. The asterisks are kept, but
+are left unbold and dimmed, so the emphasized words stand out from their markers.
+
+- A span may cross a wrapped line, but not a blank line.
+- Fenced code blocks, indented code blocks and inline code spans are left as written, so `**kwargs`
+  in a code sample stays plain. A `\*\*` escaped marker is left alone too.
+- Styling is applied after wrapping, so it adds no width and leaves table columns aligned.
 
 ## Configuration
 
