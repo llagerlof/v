@@ -1,14 +1,14 @@
 # v
 
-A small CLI program for viewing text files in the terminal with custom width word wrapping, optional syntax highlighting and optional pagination. Made for readers.
+A *small CLI* program for viewing text files in the terminal with custom width word wrapping, optional syntax highlighting and optional pagination. Made for readers.
 
 ## Features
 
-- Print a file's contents to the terminal (non-paginated by default).
+- *Print a file's contents to the terminal* (non-paginated by default).
 - Syntax highlighting based on the file extension (enabled by default).
 - Word wrapping at a configurable column width (default 80).
 - Markdown tables redrawn as ASCII grid tables (enabled by default).
-- Markdown `**bold**` text shown in bold, with faint asterisks.
+- Markdown emphasis rendered with real terminal styling: `*italic*`, `**bold**` and `***both***`, with faint asterisks.
 - Optional pagination.
 - Persistent settings above can be set in a TOML config file.
 
@@ -96,15 +96,21 @@ In markdown files (`.md`, `.markdown`, `.mdown`, `.mkd`, `.mdx`), pipe tables ar
 
 Use `-t off` or `table = "off"` in the config to print the original markdown instead.
 
-## Markdown bold
+## Markdown emphasis
 
-In markdown files, text wrapped in double asterisks is printed in bold. The asterisks are kept, but
-are left unbold and dimmed, so the emphasized words stand out from their markers.
+In markdown files, asterisk emphasis is printed with the terminal's own styling: `*one asterisk*` is
+italic, `**two**` is bold and `***three***` is both. The asterisks are kept, but are left unstyled
+and dimmed, so the emphasized words stand out from their markers.
 
+- Emphasis nests: in `**bold *and italic* again**`, the inner span is both.
 - A span may cross a wrapped line, but not a blank line.
+- A delimiter must hug its text, so `2 * 3`, `*.rs` globs and `* list item` markers stay plain.
 - Fenced code blocks, indented code blocks and inline code spans are left as written, so `**kwargs`
-  in a code sample stays plain. A `\*\*` escaped marker is left alone too.
+  in a code sample stays plain. Escaped markers (`\*\*`) are left alone too.
 - Styling is applied after wrapping, so it adds no width and leaves table columns aligned.
+
+Terminals without italic support fall back to their own substitute (often the normal or the inverse
+style); bold and faint are supported everywhere.
 
 ## Configuration
 

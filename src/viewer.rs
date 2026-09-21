@@ -81,7 +81,7 @@ fn render(
     // Strong emphasis is styled last, so it survives highlighting and adds only
     // zero-width escapes to already wrapped lines.
     if markdown::is_markdown_path(path) {
-        Ok(emphasis::style_strong(&styled))
+        Ok(emphasis::style_emphasis(&styled))
     } else {
         Ok(styled)
     }

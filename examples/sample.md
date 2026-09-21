@@ -10,7 +10,7 @@ fn main() {
 }
 ```
 
-**Bold text** and *italic text* with more words to test wrapping behavior across multiple highlighted spans in a single line of markdown content here.
+**Bold text**, *italic text*, ***both***, and **nested *emphasis* inside** with more words to test wrapping behavior across multiple highlighted spans in a single line of markdown content here.
 
 ## Table
 
